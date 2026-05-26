@@ -304,3 +304,51 @@ fn note_new_creates_platform_post_draft() {
 
     fs::remove_dir_all(lab).ok();
 }
+
+#[test]
+fn session_normalize_creates_canonical_markdown_with_block_id() {
+    let lab = temp_path("session-normalize");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before normalize");
+
+    let raw_file = lab.join("00_raw-sessions").join("manual-session.txt");
+    fs::write(&raw_file, "중심극한정리가 뭐지?\n\n표본 평균의 분포 이야기다.")
+        .expect("raw fixture should be written");
+
+    let output = Command::new(cli())
+        .args(["session", "normalize"])
+        .arg(&lab)
+        .arg(&raw_file)
+        .args([
+            "--title",
+            "CLT Conversation",
+            "--source-type",
+            "ai_conversation",
+        ])
+        .output()
+        .expect("failed to run session normalize");
+
+    assert!(
+        output.status.success(),
+        "session normalize should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let session_path = lab
+        .join("01_sessions")
+        .join("clt-conversation.md");
+    assert_exists(&session_path);
+    let session = fs::read_to_string(session_path).expect("session should be readable");
+    assert!(session.contains("type: session"));
+    assert!(session.contains("source_type: ai_conversation"));
+    assert!(session.contains("raw_file: 00_raw-sessions/manual-session.txt"));
+    assert!(session.contains("### t0001 source ^t0001"));
+    assert!(session.contains("중심극한정리가 뭐지?"));
+
+    fs::remove_dir_all(lab).ok();
+}
