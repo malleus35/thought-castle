@@ -160,6 +160,8 @@ fn packaged_skill_file_is_available_for_agent_installers() {
 
     assert!(skill.contains("name: creative-idea-lab"));
     assert!(skill.contains("creative-idea-lab validate"));
+    assert!(skill.contains("creative-idea-lab ingest"));
+    assert!(skill.contains("creative-idea-lab note new"));
 }
 
 #[test]
