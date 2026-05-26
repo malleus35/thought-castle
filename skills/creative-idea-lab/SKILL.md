@@ -13,6 +13,7 @@ Use this skill when working in a Creative Idea Lab vault or when creating one.
 creative-idea-lab init <path>
 creative-idea-lab validate <path>
 creative-idea-lab ingest <lab> <source-file> --provider <name> --source-type <type>
+creative-idea-lab session normalize <lab> <raw-file> --title <title> --source-type <type>
 creative-idea-lab note new <knowledge|thought|idea|post> <lab> --title <title> --session <ref> --raw-file <path>
 creative-idea-lab skill print
 creative-idea-lab skill install --target <skills-dir>
@@ -40,6 +41,14 @@ creative-idea-lab skill install --target <skills-dir>
 
 ```bash
 creative-idea-lab ingest . ~/Downloads/session.jsonl --provider pi --source-type ai_conversation
+```
+
+### Normalize a raw session
+
+```bash
+creative-idea-lab session normalize . 00_raw-sessions/session.txt \
+  --title "AI Content Fatigue Conversation" \
+  --source-type ai_conversation
 ```
 
 ### Create a thought draft

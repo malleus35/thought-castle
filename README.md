@@ -30,6 +30,7 @@ This repository includes a Rust CLI.
 cargo run -- init /tmp/my-lab
 cargo run -- validate /tmp/my-lab
 cargo run -- ingest /tmp/my-lab ./session.jsonl --provider pi --source-type ai_conversation
+cargo run -- session normalize /tmp/my-lab /tmp/my-lab/00_raw-sessions/session.jsonl --title "Session Title" --source-type ai_conversation
 cargo run -- note new thought /tmp/my-lab --title "AI Content Fatigue" --session "[[01_sessions/example.md#^t0038]]" --raw-file "00_raw-sessions/session.jsonl"
 cargo run -- skill print
 cargo run -- skill install --target ~/.agents/skills

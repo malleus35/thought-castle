@@ -71,6 +71,14 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             let source_type = flags.required("--source-type")?;
             ingest_raw(Path::new(lab), Path::new(source), provider, source_type)
         }
+        [command, subcommand, lab, raw_file, rest @ ..]
+            if command == "session" && subcommand == "normalize" =>
+        {
+            let flags = Flags::parse(rest)?;
+            let title = flags.required("--title")?;
+            let source_type = flags.required("--source-type")?;
+            normalize_session(Path::new(lab), Path::new(raw_file), title, source_type)
+        }
         [command, subcommand, kind, lab, rest @ ..] if command == "note" && subcommand == "new" => {
             let flags = Flags::parse(rest)?;
             let title = flags.required("--title")?;
@@ -98,7 +106,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "creative-idea-lab\n\nCommands:\n  init <path>\n  validate <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
+        "creative-idea-lab\n\nCommands:\n  init <path>\n  validate <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
     );
 }
 
@@ -270,6 +278,45 @@ fn create_note(
     Ok(())
 }
 
+fn normalize_session(lab: &Path, raw_file: &Path, title: &str, source_type: &str) -> CliResult<()> {
+    let raw_text = fs::read_to_string(raw_file).map_err(CliError::Io)?;
+    let raw_relative = relative_display(lab, raw_file);
+    let session = format!(
+        concat!(
+            "---\n",
+            "type: session\n",
+            "status: normalized\n",
+            "source_type: {}\n",
+            "participants: []\n",
+            "raw_file: {}\n",
+            "tags:\n",
+            "  - type/session\n",
+            "---\n\n",
+            "# {}\n\n",
+            "## Summary\n\n",
+            "TODO: summarize this session.\n\n",
+            "## Context\n\n",
+            "TODO: explain why this session was captured.\n\n",
+            "## Conversation\n\n",
+            "### t0001 source ^t0001\n\n",
+            "{}\n\n",
+            "## Extracted Candidates\n\n",
+            "### Knowledge Candidates\n\n",
+            "### Thought Candidates\n\n",
+            "### Idea Candidates\n\n",
+            "### Post Candidates\n"
+        ),
+        source_type, raw_relative, title, raw_text
+    );
+
+    let destination = lab
+        .join("01_sessions")
+        .join(format!("{}.md", slugify(title)));
+    write_new(&destination, &session)?;
+    println!("normalized: {}", destination.display());
+    Ok(())
+}
+
 fn write_if_missing(path: &Path, contents: &str) -> CliResult<()> {
     if path.exists() {
         return Ok(());
@@ -327,6 +374,13 @@ fn json_escape(input: &str) -> String {
 
 fn yaml_escape(input: &str) -> String {
     input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn relative_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
 }
 
 struct Flags<'a> {

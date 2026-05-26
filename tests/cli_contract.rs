@@ -313,11 +313,17 @@ fn session_normalize_creates_canonical_markdown_with_block_id() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before normalize");
+    assert!(
+        init.status.success(),
+        "init should succeed before normalize"
+    );
 
     let raw_file = lab.join("00_raw-sessions").join("manual-session.txt");
-    fs::write(&raw_file, "중심극한정리가 뭐지?\n\n표본 평균의 분포 이야기다.")
-        .expect("raw fixture should be written");
+    fs::write(
+        &raw_file,
+        "중심극한정리가 뭐지?\n\n표본 평균의 분포 이야기다.",
+    )
+    .expect("raw fixture should be written");
 
     let output = Command::new(cli())
         .args(["session", "normalize"])
@@ -339,9 +345,7 @@ fn session_normalize_creates_canonical_markdown_with_block_id() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let session_path = lab
-        .join("01_sessions")
-        .join("clt-conversation.md");
+    let session_path = lab.join("01_sessions").join("clt-conversation.md");
     assert_exists(&session_path);
     let session = fs::read_to_string(session_path).expect("session should be readable");
     assert!(session.contains("type: session"));
