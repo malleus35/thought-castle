@@ -161,3 +161,143 @@ fn packaged_skill_file_is_available_for_agent_installers() {
     assert!(skill.contains("name: creative-idea-lab"));
     assert!(skill.contains("creative-idea-lab validate"));
 }
+
+#[test]
+fn ingest_copies_raw_file_and_writes_metadata_sidecar() {
+    let lab = temp_path("ingest-lab");
+    let source_dir = temp_path("ingest-source");
+    fs::create_dir_all(&source_dir).expect("source dir should be created");
+    let source_file = source_dir.join("pi-session.jsonl");
+    fs::write(&source_file, r#"{"id":"1","type":"user","text":"hello"}"#)
+        .expect("source fixture should be written");
+
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before ingest");
+
+    let output = Command::new(cli())
+        .arg("ingest")
+        .arg(&lab)
+        .arg(&source_file)
+        .args(["--provider", "pi", "--source-type", "ai_conversation"])
+        .output()
+        .expect("failed to run ingest");
+
+    assert!(
+        output.status.success(),
+        "ingest should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let raw_file = lab.join("00_raw-sessions").join("pi-session.jsonl");
+    assert_exists(&raw_file);
+    assert_eq!(
+        fs::read_to_string(&raw_file).expect("raw file should be readable"),
+        r#"{"id":"1","type":"user","text":"hello"}"#
+    );
+
+    let metadata = fs::read_to_string(
+        lab.join("00_raw-sessions")
+            .join("pi-session.jsonl.meta.json"),
+    )
+    .expect("metadata sidecar should be readable");
+    assert!(metadata.contains(r#""provider": "pi""#));
+    assert!(metadata.contains(r#""source_type": "ai_conversation""#));
+    assert!(metadata.contains(r#""original_filename": "pi-session.jsonl""#));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(source_dir).ok();
+}
+
+#[test]
+fn note_new_creates_thought_draft_with_source_trace() {
+    let lab = temp_path("thought-note");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    let output = Command::new(cli())
+        .args(["note", "new", "thought"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "AI Content Fatigue",
+            "--session",
+            "[[01_sessions/example.md#^t0038]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+        ])
+        .output()
+        .expect("failed to run note new thought");
+
+    assert!(
+        output.status.success(),
+        "note new thought should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let note_path = lab
+        .join("20_thoughts")
+        .join("ai-content-fatigue.md");
+    assert_exists(&note_path);
+    let note = fs::read_to_string(note_path).expect("thought note should be readable");
+    assert!(note.contains("status: draft"));
+    assert!(note.contains("user_confirmed: false"));
+    assert!(note.contains("session: \"[[01_sessions/example.md#^t0038]]\""));
+    assert!(note.contains("raw_file: \"00_raw-sessions/example.txt\""));
+    assert!(note.contains("# AI Content Fatigue"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
+fn note_new_creates_platform_post_draft() {
+    let lab = temp_path("post-note");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    let output = Command::new(cli())
+        .args(["note", "new", "post"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "Process Erasure",
+            "--platform",
+            "linkedin",
+            "--session",
+            "[[01_sessions/example.md#^t0040]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+        ])
+        .output()
+        .expect("failed to run note new post");
+
+    assert!(
+        output.status.success(),
+        "note new post should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let note_path = lab.join("40_posts").join("linkedin").join("process-erasure.md");
+    assert_exists(&note_path);
+    let note = fs::read_to_string(note_path).expect("post note should be readable");
+    assert!(note.contains("platform: linkedin"));
+    assert!(note.contains("session: \"[[01_sessions/example.md#^t0040]]\""));
+    assert!(note.contains("## Review Checklist"));
+    assert!(note.contains("# Process Erasure"));
+
+    fs::remove_dir_all(lab).ok();
+}
