@@ -1,7 +1,9 @@
+use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::error::Error;
 use std::fmt;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -31,8 +33,14 @@ const TEMPLATE_FILES: &[(&str, &str)] = &[
 ];
 
 const SYSTEM_FILES: &[(&str, &str)] = &[
-    ("_system/source-reference-schema.md", SOURCE_REFERENCE_SCHEMA),
-    ("_system/status-transition-rules.md", STATUS_TRANSITION_RULES),
+    (
+        "_system/source-reference-schema.md",
+        SOURCE_REFERENCE_SCHEMA,
+    ),
+    (
+        "_system/status-transition-rules.md",
+        STATUS_TRANSITION_RULES,
+    ),
 ];
 
 fn main() {
@@ -57,6 +65,20 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             print!("{SKILL_MD}");
             Ok(())
         }
+        [command, lab, source, rest @ ..] if command == "ingest" => {
+            let flags = Flags::parse(rest)?;
+            let provider = flags.required("--provider")?;
+            let source_type = flags.required("--source-type")?;
+            ingest_raw(Path::new(lab), Path::new(source), provider, source_type)
+        }
+        [command, subcommand, kind, lab, rest @ ..] if command == "note" && subcommand == "new" => {
+            let flags = Flags::parse(rest)?;
+            let title = flags.required("--title")?;
+            let session = flags.required("--session")?;
+            let raw_file = flags.required("--raw-file")?;
+            let platform = flags.optional("--platform");
+            create_note(Path::new(lab), kind, title, session, raw_file, platform)
+        }
         [command, subcommand, flag, target]
             if command == "skill" && subcommand == "install" && flag == "--target" =>
         {
@@ -68,7 +90,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | skill print | skill install --target <path>"
+            "expected: init <path> | validate <path> | ingest <lab> <source> --provider <name> --source-type <type> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
                 .to_string(),
         )),
     }
@@ -153,6 +175,101 @@ fn install_skill(target: &Path) -> CliResult<()> {
     Ok(())
 }
 
+fn ingest_raw(lab: &Path, source: &Path, provider: &str, source_type: &str) -> CliResult<()> {
+    let raw_dir = lab.join("00_raw-sessions");
+    fs::create_dir_all(&raw_dir).map_err(CliError::Io)?;
+
+    let filename = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| CliError::Usage("source must have a valid file name".to_string()))?;
+    let destination = raw_dir.join(filename);
+    if destination.exists() {
+        return Err(CliError::Usage(format!(
+            "raw file already exists: {}",
+            destination.display()
+        )));
+    }
+
+    let bytes = fs::read(source).map_err(CliError::Io)?;
+    fs::write(&destination, &bytes).map_err(CliError::Io)?;
+
+    let metadata = format!(
+        concat!(
+            "{{\n",
+            "  \"provider\": \"{}\",\n",
+            "  \"source_type\": \"{}\",\n",
+            "  \"original_filename\": \"{}\",\n",
+            "  \"byte_len\": {},\n",
+            "  \"content_hash\": \"{}\"\n",
+            "}}\n"
+        ),
+        json_escape(provider),
+        json_escape(source_type),
+        json_escape(filename),
+        bytes.len(),
+        content_hash(&bytes)
+    );
+    fs::write(raw_dir.join(format!("{filename}.meta.json")), metadata).map_err(CliError::Io)?;
+
+    println!("ingested: {}", destination.display());
+    Ok(())
+}
+
+fn create_note(
+    lab: &Path,
+    kind: &str,
+    title: &str,
+    session: &str,
+    raw_file: &str,
+    platform: Option<&str>,
+) -> CliResult<()> {
+    let slug = slugify(title);
+    let extraction_type = kind;
+    let source_refs = format!(
+        concat!(
+            "source_refs:\n",
+            "  - session: \"{}\"\n",
+            "    raw_file: \"{}\"\n",
+            "    extraction_type: {}\n",
+            "    confidence: medium"
+        ),
+        yaml_escape(session),
+        yaml_escape(raw_file),
+        extraction_type
+    );
+
+    let (relative_dir, template) = match kind {
+        "knowledge" => ("10_knowledge".to_string(), KNOWLEDGE_TEMPLATE),
+        "thought" => ("20_thoughts".to_string(), THOUGHT_TEMPLATE),
+        "idea" => ("30_ideas".to_string(), IDEA_TEMPLATE),
+        "post" => {
+            let platform = platform.unwrap_or("linkedin");
+            (format!("40_posts/{platform}"), POST_TEMPLATE)
+        }
+        _ => {
+            return Err(CliError::Usage(
+                "note kind must be one of: knowledge, thought, idea, post".to_string(),
+            ));
+        }
+    };
+
+    let mut note = template.replace("source_refs: []", &source_refs);
+    note = note.replace("# Title", &format!("# {title}"));
+    if kind == "post" {
+        let platform = platform.unwrap_or("linkedin");
+        note = note.replace("platform:\n", &format!("platform: {platform}\n"));
+    }
+
+    let directory = lab.join(relative_dir);
+    fs::create_dir_all(&directory).map_err(CliError::Io)?;
+    let destination = directory.join(format!("{slug}.md"));
+    write_new(&destination, &note)?;
+
+    println!("created: {}", destination.display());
+    Ok(())
+}
+
 fn write_if_missing(path: &Path, contents: &str) -> CliResult<()> {
     if path.exists() {
         return Ok(());
@@ -161,6 +278,91 @@ fn write_if_missing(path: &Path, contents: &str) -> CliResult<()> {
         fs::create_dir_all(parent).map_err(CliError::Io)?;
     }
     fs::write(path, contents).map_err(CliError::Io)
+}
+
+fn write_new(path: &Path, contents: &str) -> CliResult<()> {
+    if path.exists() {
+        return Err(CliError::Usage(format!(
+            "refusing to overwrite existing file: {}",
+            path.display()
+        )));
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(CliError::Io)?;
+    }
+    fs::write(path, contents).map_err(CliError::Io)
+}
+
+fn content_hash(bytes: &[u8]) -> String {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn slugify(input: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_dash = false;
+
+    for character in input.chars() {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character.to_ascii_lowercase());
+            last_was_dash = false;
+        } else if !last_was_dash {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        "note".to_string()
+    } else {
+        slug
+    }
+}
+
+fn json_escape(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn yaml_escape(input: &str) -> String {
+    input.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+struct Flags<'a> {
+    values: Vec<(&'a str, &'a str)>,
+}
+
+impl<'a> Flags<'a> {
+    fn parse(args: &'a [String]) -> CliResult<Self> {
+        let mut values = Vec::new();
+        let mut chunks = args.chunks_exact(2);
+        for chunk in &mut chunks {
+            let flag = chunk[0].as_str();
+            let value = chunk[1].as_str();
+            if !flag.starts_with("--") {
+                return Err(CliError::Usage(format!("expected flag, got: {flag}")));
+            }
+            values.push((flag, value));
+        }
+        if !chunks.remainder().is_empty() {
+            return Err(CliError::Usage(
+                "flags must be passed as --name value pairs".to_string(),
+            ));
+        }
+        Ok(Self { values })
+    }
+
+    fn required(&self, name: &str) -> CliResult<&'a str> {
+        self.optional(name)
+            .ok_or_else(|| CliError::Usage(format!("missing required flag: {name}")))
+    }
+
+    fn optional(&self, name: &str) -> Option<&'a str> {
+        self.values
+            .iter()
+            .find_map(|(flag, value)| (*flag == name).then_some(*value))
+    }
 }
 
 struct ValidationReport {

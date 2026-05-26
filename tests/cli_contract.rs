@@ -244,9 +244,7 @@ fn note_new_creates_thought_draft_with_source_trace() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let note_path = lab
-        .join("20_thoughts")
-        .join("ai-content-fatigue.md");
+    let note_path = lab.join("20_thoughts").join("ai-content-fatigue.md");
     assert_exists(&note_path);
     let note = fs::read_to_string(note_path).expect("thought note should be readable");
     assert!(note.contains("status: draft"));
@@ -291,7 +289,10 @@ fn note_new_creates_platform_post_draft() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let note_path = lab.join("40_posts").join("linkedin").join("process-erasure.md");
+    let note_path = lab
+        .join("40_posts")
+        .join("linkedin")
+        .join("process-erasure.md");
     assert_exists(&note_path);
     let note = fs::read_to_string(note_path).expect("post note should be readable");
     assert!(note.contains("platform: linkedin"));
