@@ -1,0 +1,8 @@
+[package]
+name = "creative-idea-lab"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "creative-idea-lab"
+path = "src/main.rs"
