@@ -98,7 +98,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "creative-idea-lab\n\nCommands:\n  init <path>\n  validate <path>\n  skill print\n  skill install --target <path>"
+        "creative-idea-lab\n\nCommands:\n  init <path>\n  validate <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
     );
 }
 
