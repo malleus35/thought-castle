@@ -147,3 +147,17 @@ fn skill_install_writes_skill_to_explicit_target() {
 
     fs::remove_dir_all(target).ok();
 }
+
+#[test]
+fn packaged_skill_file_is_available_for_agent_installers() {
+    let skill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("skills")
+        .join("creative-idea-lab")
+        .join("SKILL.md");
+
+    let skill = fs::read_to_string(&skill_path)
+        .unwrap_or_else(|error| panic!("skill file should be readable at {skill_path:?}: {error}"));
+
+    assert!(skill.contains("name: creative-idea-lab"));
+    assert!(skill.contains("creative-idea-lab validate"));
+}
