@@ -65,6 +65,19 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             print!("{SKILL_MD}");
             Ok(())
         }
+        [command, subcommand, lab, rest @ ..] if command == "source" && subcommand == "list" => {
+            let flags = Flags::parse(rest)?;
+            let provider = flags.required("--provider")?;
+            let root = flags.required("--root")?;
+            list_sources(Path::new(lab), provider, Path::new(root))
+        }
+        [command, subcommand, lab, rest @ ..] if command == "ingest" && subcommand == "manual" => {
+            let flags = Flags::parse(rest)?;
+            let provider = flags.required("--provider")?;
+            let title = flags.required("--title")?;
+            let source = flags.required("--file")?;
+            ingest_manual(Path::new(lab), Path::new(source), provider, title)
+        }
         [command, lab, source, rest @ ..] if command == "ingest" => {
             let flags = Flags::parse(rest)?;
             let provider = flags.required("--provider")?;
@@ -98,7 +111,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | ingest <lab> <source> --provider <name> --source-type <type> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
+            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
                 .to_string(),
         )),
     }
@@ -106,7 +119,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "creative-idea-lab\n\nCommands:\n  init <path>\n  validate <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
     );
 }
 
@@ -176,7 +189,7 @@ fn validate_lab(root: &Path) -> CliResult<ValidationReport> {
 }
 
 fn install_skill(target: &Path) -> CliResult<()> {
-    let skill_dir = target.join("creative-idea-lab");
+    let skill_dir = target.join("thought-castle");
     fs::create_dir_all(&skill_dir).map_err(CliError::Io)?;
     fs::write(skill_dir.join("SKILL.md"), SKILL_MD).map_err(CliError::Io)?;
     println!("installed: {}", skill_dir.join("SKILL.md").display());
@@ -221,6 +234,125 @@ fn ingest_raw(lab: &Path, source: &Path, provider: &str, source_type: &str) -> C
     fs::write(raw_dir.join(format!("{filename}.meta.json")), metadata).map_err(CliError::Io)?;
 
     println!("ingested: {}", destination.display());
+    Ok(())
+}
+
+fn ingest_manual(lab: &Path, source: &Path, provider: &str, title: &str) -> CliResult<()> {
+    let raw_dir = lab.join("00_raw-sessions").join("manual");
+    fs::create_dir_all(&raw_dir).map_err(CliError::Io)?;
+
+    let filename = source
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| CliError::Usage("source must have a valid file name".to_string()))?;
+    let destination = raw_dir.join(filename);
+    if destination.exists() {
+        return Err(CliError::Usage(format!(
+            "raw file already exists: {}",
+            destination.display()
+        )));
+    }
+
+    let bytes = fs::read(source).map_err(CliError::Io)?;
+    fs::write(&destination, &bytes).map_err(CliError::Io)?;
+
+    let metadata = format!(
+        concat!(
+            "{{\n",
+            "  \"provider\": \"{}\",\n",
+            "  \"source_type\": \"manual_capture\",\n",
+            "  \"original_filename\": \"{}\",\n",
+            "  \"title\": \"{}\",\n",
+            "  \"byte_len\": {},\n",
+            "  \"content_hash\": \"{}\"\n",
+            "}}\n"
+        ),
+        json_escape(provider),
+        json_escape(filename),
+        json_escape(title),
+        bytes.len(),
+        content_hash(&bytes)
+    );
+    fs::write(raw_dir.join(format!("{filename}.meta.json")), metadata).map_err(CliError::Io)?;
+
+    println!("ingested manual: {}", destination.display());
+    Ok(())
+}
+
+fn list_sources(lab: &Path, provider: &str, root: &Path) -> CliResult<()> {
+    if !lab.is_dir() {
+        return Err(CliError::Usage(format!(
+            "lab path must be an initialized directory: {}",
+            lab.display()
+        )));
+    }
+
+    let mut candidates = match provider {
+        "codex" | "claude-code" | "pi-agent" => discover_by_extension(root, "jsonl")?,
+        "opencode" => discover_by_filename(root, "opencode.db")?,
+        _ => {
+            return Err(CliError::Usage(
+                "provider must be one of: codex, claude-code, opencode, pi-agent".to_string(),
+            ));
+        }
+    };
+    candidates.sort();
+
+    println!("provider: {provider}");
+    println!("root: {}", root.display());
+    println!("candidates: {}", candidates.len());
+    for candidate in candidates {
+        println!("- {}", candidate.display());
+    }
+    Ok(())
+}
+
+fn discover_by_extension(root: &Path, extension: &str) -> CliResult<Vec<PathBuf>> {
+    discover_sources(root, &|path| {
+        path.extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value == extension)
+    })
+}
+
+fn discover_by_filename(root: &Path, filename: &str) -> CliResult<Vec<PathBuf>> {
+    discover_sources(root, &|path| {
+        path.file_name()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value == filename)
+    })
+}
+
+fn discover_sources(root: &Path, is_candidate: &dyn Fn(&Path) -> bool) -> CliResult<Vec<PathBuf>> {
+    let mut candidates = Vec::new();
+    collect_sources(root, is_candidate, &mut candidates)?;
+    Ok(candidates)
+}
+
+fn collect_sources(
+    path: &Path,
+    is_candidate: &dyn Fn(&Path) -> bool,
+    candidates: &mut Vec<PathBuf>,
+) -> CliResult<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    if path.is_file() {
+        if is_candidate(path) {
+            candidates.push(path.to_path_buf());
+        }
+        return Ok(());
+    }
+
+    if !path.is_dir() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(path).map_err(CliError::Io)? {
+        let entry = entry.map_err(CliError::Io)?;
+        collect_sources(&entry.path(), is_candidate, candidates)?;
+    }
     Ok(())
 }
 
@@ -464,11 +596,11 @@ impl fmt::Display for CliError {
 
 impl Error for CliError {}
 
-const INIT_README: &str = r#"# Creative Idea Lab
+const INIT_README: &str = r#"# Thought Castle
 
-Generated by `creative-idea-lab init`.
+Generated by `thought-castle init`.
 
-Use `creative-idea-lab validate .` to check the structure.
+Use `thought-castle validate .` to check the structure.
 "#;
 
 const KNOWLEDGE_TEMPLATE: &str = r#"---
@@ -650,4 +782,4 @@ draft -> archived
 ```
 "#;
 
-const SKILL_MD: &str = include_str!("../skills/creative-idea-lab/SKILL.md");
+const SKILL_MD: &str = include_str!("../skills/thought-castle/SKILL.md");

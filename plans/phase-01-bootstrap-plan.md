@@ -2,7 +2,7 @@
 
 ## Goal
 
-Creative Idea Lab의 수동/자동 경계를 먼저 고정하고, 이후 parser와 agent automation을 붙일 수 있는 문서 기반 구조를 만든다.
+Thought Castle의 수동/자동 경계를 먼저 고정하고, 이후 parser와 agent automation을 붙일 수 있는 문서 기반 구조를 만든다.
 
 ## Phase Scope
 

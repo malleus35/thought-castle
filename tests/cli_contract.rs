@@ -161,7 +161,19 @@ fn packaged_skill_file_is_available_for_agent_installers() {
     assert!(skill.contains("name: thought-castle"));
     assert!(skill.contains("thought-castle validate"));
     assert!(skill.contains("thought-castle ingest"));
+    assert!(skill.contains("thought-castle source list"));
+    assert!(skill.contains("thought-castle ingest manual"));
     assert!(skill.contains("thought-castle note new"));
+}
+
+#[test]
+fn readme_documents_source_list_and_manual_ingest_commands() {
+    let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md");
+    let readme = fs::read_to_string(&readme_path)
+        .unwrap_or_else(|error| panic!("README should be readable at {readme_path:?}: {error}"));
+
+    assert!(readme.contains("cargo run -- source list"));
+    assert!(readme.contains("cargo run -- ingest manual"));
 }
 
 #[test]
@@ -224,7 +236,10 @@ fn source_list_discovers_local_agent_sessions_without_printing_message_text() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before source list");
+    assert!(
+        init.status.success(),
+        "init should succeed before source list"
+    );
 
     let codex_dir = root.join("codex").join("2026").join("06").join("07");
     fs::create_dir_all(&codex_dir).expect("codex fixture dir should be created");
@@ -302,7 +317,10 @@ fn source_list_discovers_opencode_database_without_reading_rows() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before source list");
+    assert!(
+        init.status.success(),
+        "init should succeed before source list"
+    );
 
     fs::create_dir_all(&root).expect("opencode fixture root should be created");
     fs::write(root.join("opencode.db"), b"SECRET_MESSAGE_DO_NOT_PRINT")
@@ -347,12 +365,21 @@ fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before manual ingest");
+    assert!(
+        init.status.success(),
+        "init should succeed before manual ingest"
+    );
 
     let output = Command::new(cli())
         .args(["ingest", "manual"])
         .arg(&lab)
-        .args(["--provider", "chatgpt", "--title", "Manual ChatGPT Thread", "--file"])
+        .args([
+            "--provider",
+            "chatgpt",
+            "--title",
+            "Manual ChatGPT Thread",
+            "--file",
+        ])
         .arg(&source_file)
         .output()
         .expect("failed to run ingest manual");
@@ -374,9 +401,8 @@ fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
         "# Thread\n\nmanual capture"
     );
 
-    let metadata =
-        fs::read_to_string(raw_file.with_file_name("chatgpt-thread.md.meta.json"))
-            .expect("manual metadata should be readable");
+    let metadata = fs::read_to_string(raw_file.with_file_name("chatgpt-thread.md.meta.json"))
+        .expect("manual metadata should be readable");
     assert!(metadata.contains(r#""provider": "chatgpt""#));
     assert!(metadata.contains(r#""source_type": "manual_capture""#));
     assert!(metadata.contains(r#""title": "Manual ChatGPT Thread""#));

@@ -1,8 +1,8 @@
 [package]
-name = "creative-idea-lab"
+name = "thought-castle"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "creative-idea-lab"
+name = "thought-castle"
 path = "src/main.rs"
