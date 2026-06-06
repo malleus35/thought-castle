@@ -412,6 +412,119 @@ fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
 }
 
 #[test]
+fn sync_copies_automatic_agent_sessions_and_is_idempotent() {
+    let lab = temp_path("sync-agent-lab");
+    let root = temp_path("sync-agent-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before sync");
+
+    let codex_dir = root.join("codex").join("2026").join("06").join("07");
+    fs::create_dir_all(&codex_dir).expect("codex fixture dir should be created");
+    fs::write(
+        codex_dir.join("rollout-2026-06-07T00-00-00-session.jsonl"),
+        r#"{"type":"message","text":"sync me"}"#,
+    )
+    .expect("codex fixture should be written");
+
+    let output = Command::new(cli())
+        .arg("sync")
+        .arg(&lab)
+        .args(["--provider", "codex", "--root"])
+        .arg(root.join("codex"))
+        .output()
+        .expect("failed to run codex sync");
+
+    assert!(
+        output.status.success(),
+        "sync should succeed for codex\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("synced: 1"));
+
+    let raw_file = lab
+        .join("00_raw-sessions")
+        .join("codex")
+        .join("rollout-2026-06-07T00-00-00-session.jsonl");
+    assert_exists(&raw_file);
+    let metadata = fs::read_to_string(
+        lab.join("00_raw-sessions")
+            .join("codex")
+            .join("rollout-2026-06-07T00-00-00-session.jsonl.meta.json"),
+    )
+    .expect("sync metadata should be readable");
+    assert!(metadata.contains(r#""provider": "codex""#));
+    assert!(metadata.contains(r#""source_type": "automatic_session""#));
+
+    let rerun = Command::new(cli())
+        .arg("sync")
+        .arg(&lab)
+        .args(["--provider", "codex", "--root"])
+        .arg(root.join("codex"))
+        .output()
+        .expect("failed to rerun codex sync");
+
+    assert!(
+        rerun.status.success(),
+        "sync rerun should succeed for codex\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rerun.stdout),
+        String::from_utf8_lossy(&rerun.stderr)
+    );
+    assert!(String::from_utf8_lossy(&rerun.stdout).contains("synced: 0"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn sync_copies_opencode_database_snapshot() {
+    let lab = temp_path("sync-opencode-lab");
+    let root = temp_path("sync-opencode-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before sync");
+
+    fs::create_dir_all(&root).expect("opencode fixture root should be created");
+    fs::write(root.join("opencode.db"), b"sqlite snapshot")
+        .expect("opencode fixture should be written");
+
+    let output = Command::new(cli())
+        .arg("sync")
+        .arg(&lab)
+        .args(["--provider", "opencode", "--root"])
+        .arg(&root)
+        .output()
+        .expect("failed to run opencode sync");
+
+    assert!(
+        output.status.success(),
+        "sync should succeed for opencode\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let raw_file = lab
+        .join("00_raw-sessions")
+        .join("opencode")
+        .join("opencode.db");
+    assert_exists(&raw_file);
+    assert_eq!(
+        fs::read(&raw_file).expect("opencode raw db should be readable"),
+        b"sqlite snapshot"
+    );
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn note_new_creates_thought_draft_with_source_trace() {
     let lab = temp_path("thought-note");
     let init = Command::new(cli())

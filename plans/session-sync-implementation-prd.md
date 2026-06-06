@@ -79,6 +79,19 @@ The sidecar must include:
 
 README and the installable skill must show the new commands.
 
+### R5. Automatic Sync
+
+`thought-castle sync <lab> --provider <provider> --root <path>` copies discovered automatic-source candidates into `00_raw-sessions/<provider>/` and writes `.meta.json` sidecars.
+
+Supported providers in this slice:
+
+- `codex`
+- `claude-code`
+- `opencode`
+- `pi-agent`
+
+The command must be idempotent: re-running sync against unchanged source files must not create duplicate raw files.
+
 ## Test Requirements
 
 - A Codex fixture root with nested `*.jsonl` sessions is counted.
@@ -87,6 +100,8 @@ README and the installable skill must show the new commands.
 - An OpenCode fixture root with `opencode.db` is counted.
 - Fixture message text is not printed by `source list`.
 - Manual ingest copies a fixture file to `00_raw-sessions/manual/` and writes metadata.
+- Automatic sync copies JSONL/DB candidates to provider-specific raw folders.
+- Automatic sync is idempotent for unchanged candidates.
 
 ## Risks
 
@@ -98,4 +113,4 @@ README and the installable skill must show the new commands.
 
 - `cargo test` passes.
 - Existing CLI behavior remains unchanged.
-- New source list and manual ingest commands are covered by contract tests.
+- New source list, manual ingest, and automatic sync commands are covered by contract tests.
