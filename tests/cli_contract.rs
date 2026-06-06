@@ -4,7 +4,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn cli() -> PathBuf {
-    PathBuf::from(env!("CARGO_BIN_EXE_creative-idea-lab"))
+    PathBuf::from(env!("CARGO_BIN_EXE_thought-castle"))
 }
 
 fn temp_path(name: &str) -> PathBuf {
@@ -12,7 +12,7 @@ fn temp_path(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("creative-idea-lab-test-{name}-{suffix}"))
+    std::env::temp_dir().join(format!("thought-castle-test-{name}-{suffix}"))
 }
 
 fn assert_exists(path: impl AsRef<Path>) {
@@ -31,7 +31,7 @@ fn init_creates_core_vault_structure_and_templates() {
         .arg("init")
         .arg(&target)
         .output()
-        .expect("failed to run creative-idea-lab init");
+        .expect("failed to run thought-castle init");
 
     assert!(
         output.status.success(),
@@ -117,8 +117,8 @@ fn skill_print_outputs_installable_skill_markdown() {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("name: creative-idea-lab"));
-    assert!(stdout.contains("# Creative Idea Lab"));
+    assert!(stdout.contains("name: thought-castle"));
+    assert!(stdout.contains("# Thought Castle"));
 }
 
 #[test]
@@ -138,12 +138,12 @@ fn skill_install_writes_skill_to_explicit_target() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let skill_path = target.join("creative-idea-lab").join("SKILL.md");
+    let skill_path = target.join("thought-castle").join("SKILL.md");
     assert_exists(&skill_path);
 
     let skill = fs::read_to_string(skill_path).expect("installed skill should be readable");
-    assert!(skill.contains("name: creative-idea-lab"));
-    assert!(skill.contains("creative-idea-lab validate"));
+    assert!(skill.contains("name: thought-castle"));
+    assert!(skill.contains("thought-castle validate"));
 
     fs::remove_dir_all(target).ok();
 }
@@ -152,16 +152,16 @@ fn skill_install_writes_skill_to_explicit_target() {
 fn packaged_skill_file_is_available_for_agent_installers() {
     let skill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("skills")
-        .join("creative-idea-lab")
+        .join("thought-castle")
         .join("SKILL.md");
 
     let skill = fs::read_to_string(&skill_path)
         .unwrap_or_else(|error| panic!("skill file should be readable at {skill_path:?}: {error}"));
 
-    assert!(skill.contains("name: creative-idea-lab"));
-    assert!(skill.contains("creative-idea-lab validate"));
-    assert!(skill.contains("creative-idea-lab ingest"));
-    assert!(skill.contains("creative-idea-lab note new"));
+    assert!(skill.contains("name: thought-castle"));
+    assert!(skill.contains("thought-castle validate"));
+    assert!(skill.contains("thought-castle ingest"));
+    assert!(skill.contains("thought-castle note new"));
 }
 
 #[test]
@@ -210,6 +210,176 @@ fn ingest_copies_raw_file_and_writes_metadata_sidecar() {
     assert!(metadata.contains(r#""provider": "pi""#));
     assert!(metadata.contains(r#""source_type": "ai_conversation""#));
     assert!(metadata.contains(r#""original_filename": "pi-session.jsonl""#));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(source_dir).ok();
+}
+
+#[test]
+fn source_list_discovers_local_agent_sessions_without_printing_message_text() {
+    let lab = temp_path("source-list-lab");
+    let root = temp_path("source-list-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before source list");
+
+    let codex_dir = root.join("codex").join("2026").join("06").join("07");
+    fs::create_dir_all(&codex_dir).expect("codex fixture dir should be created");
+    fs::write(
+        codex_dir.join("rollout-2026-06-07T00-00-00-session.jsonl"),
+        r#"{"type":"message","text":"SECRET_MESSAGE_DO_NOT_PRINT"}"#,
+    )
+    .expect("codex fixture should be written");
+
+    let claude_dir = root.join("claude-code").join("-Users-macbook-workspace");
+    fs::create_dir_all(&claude_dir).expect("claude-code fixture dir should be created");
+    fs::write(
+        claude_dir.join("11111111-1111-4111-8111-111111111111.jsonl"),
+        r#"{"type":"assistant","text":"SECRET_MESSAGE_DO_NOT_PRINT"}"#,
+    )
+    .expect("claude-code fixture should be written");
+
+    let pi_dir = root.join("pi-agent").join("--Users--macbook--workspace--");
+    fs::create_dir_all(&pi_dir).expect("pi-agent fixture dir should be created");
+    fs::write(
+        pi_dir.join("2026-06-07T00-00-00_22222222-2222-4222-8222-222222222222.jsonl"),
+        r#"{"type":"message","content":"SECRET_MESSAGE_DO_NOT_PRINT"}"#,
+    )
+    .expect("pi-agent fixture should be written");
+
+    for (provider, provider_root, expected_name) in [
+        (
+            "codex",
+            root.join("codex"),
+            "rollout-2026-06-07T00-00-00-session.jsonl",
+        ),
+        (
+            "claude-code",
+            root.join("claude-code"),
+            "11111111-1111-4111-8111-111111111111.jsonl",
+        ),
+        (
+            "pi-agent",
+            root.join("pi-agent"),
+            "2026-06-07T00-00-00_22222222-2222-4222-8222-222222222222.jsonl",
+        ),
+    ] {
+        let output = Command::new(cli())
+            .args(["source", "list"])
+            .arg(&lab)
+            .args(["--provider", provider, "--root"])
+            .arg(&provider_root)
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run source list for {provider}: {error}"));
+
+        assert!(
+            output.status.success(),
+            "source list should succeed for {provider}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains(&format!("provider: {provider}")));
+        assert!(stdout.contains("candidates: 1"));
+        assert!(stdout.contains(expected_name));
+        assert!(!stdout.contains("SECRET_MESSAGE_DO_NOT_PRINT"));
+    }
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn source_list_discovers_opencode_database_without_reading_rows() {
+    let lab = temp_path("opencode-list-lab");
+    let root = temp_path("opencode-list-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before source list");
+
+    fs::create_dir_all(&root).expect("opencode fixture root should be created");
+    fs::write(root.join("opencode.db"), b"SECRET_MESSAGE_DO_NOT_PRINT")
+        .expect("opencode db fixture should be written");
+
+    let output = Command::new(cli())
+        .args(["source", "list"])
+        .arg(&lab)
+        .args(["--provider", "opencode", "--root"])
+        .arg(&root)
+        .output()
+        .expect("failed to run opencode source list");
+
+    assert!(
+        output.status.success(),
+        "source list should succeed for opencode\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("provider: opencode"));
+    assert!(stdout.contains("candidates: 1"));
+    assert!(stdout.contains("opencode.db"));
+    assert!(!stdout.contains("SECRET_MESSAGE_DO_NOT_PRINT"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
+    let lab = temp_path("manual-ingest-lab");
+    let source_dir = temp_path("manual-ingest-source");
+    fs::create_dir_all(&source_dir).expect("source dir should be created");
+    let source_file = source_dir.join("chatgpt-thread.md");
+    fs::write(&source_file, "# Thread\n\nmanual capture")
+        .expect("manual fixture should be written");
+
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before manual ingest");
+
+    let output = Command::new(cli())
+        .args(["ingest", "manual"])
+        .arg(&lab)
+        .args(["--provider", "chatgpt", "--title", "Manual ChatGPT Thread", "--file"])
+        .arg(&source_file)
+        .output()
+        .expect("failed to run ingest manual");
+
+    assert!(
+        output.status.success(),
+        "ingest manual should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let raw_file = lab
+        .join("00_raw-sessions")
+        .join("manual")
+        .join("chatgpt-thread.md");
+    assert_exists(&raw_file);
+    assert_eq!(
+        fs::read_to_string(&raw_file).expect("manual raw file should be readable"),
+        "# Thread\n\nmanual capture"
+    );
+
+    let metadata =
+        fs::read_to_string(raw_file.with_file_name("chatgpt-thread.md.meta.json"))
+            .expect("manual metadata should be readable");
+    assert!(metadata.contains(r#""provider": "chatgpt""#));
+    assert!(metadata.contains(r#""source_type": "manual_capture""#));
+    assert!(metadata.contains(r#""title": "Manual ChatGPT Thread""#));
 
     fs::remove_dir_all(lab).ok();
     fs::remove_dir_all(source_dir).ok();
