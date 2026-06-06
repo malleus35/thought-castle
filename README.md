@@ -31,6 +31,8 @@ cargo run -- init /tmp/my-lab
 cargo run -- validate /tmp/my-lab
 cargo run -- source list /tmp/my-lab --provider codex --root ~/.codex/sessions
 cargo run -- source list /tmp/my-lab --provider pi-agent --root ~/.pi/agent/sessions
+cargo run -- sync /tmp/my-lab --provider codex --root ~/.codex/sessions
+cargo run -- sync /tmp/my-lab --provider pi-agent --root ~/.pi/agent/sessions
 cargo run -- ingest /tmp/my-lab ./session.jsonl --provider pi --source-type ai_conversation
 cargo run -- ingest manual /tmp/my-lab --provider chatgpt --title "Thread Title" --file ./thread.md
 cargo run -- session normalize /tmp/my-lab /tmp/my-lab/00_raw-sessions/session.jsonl --title "Session Title" --source-type ai_conversation

@@ -13,6 +13,7 @@ Use this skill when working in a Thought Castle vault or when creating one.
 thought-castle init <path>
 thought-castle validate <path>
 thought-castle source list <lab> --provider <codex|claude-code|opencode|pi-agent> --root <path>
+thought-castle sync <lab> --provider <codex|claude-code|opencode|pi-agent> --root <path>
 thought-castle ingest <lab> <source-file> --provider <name> --source-type <type>
 thought-castle ingest manual <lab> --provider <name> --title <title> --file <path>
 thought-castle session normalize <lab> <raw-file> --title <title> --source-type <type>
@@ -46,6 +47,15 @@ thought-castle source list . --provider codex --root ~/.codex/sessions
 thought-castle source list . --provider claude-code --root ~/.claude/projects
 thought-castle source list . --provider opencode --root ~/.local/share/opencode
 thought-castle source list . --provider pi-agent --root ~/.pi/agent/sessions
+```
+
+### Sync automatic local sources
+
+```bash
+thought-castle sync . --provider codex --root ~/.codex/sessions
+thought-castle sync . --provider claude-code --root ~/.claude/projects
+thought-castle sync . --provider opencode --root ~/.local/share/opencode
+thought-castle sync . --provider pi-agent --root ~/.pi/agent/sessions
 ```
 
 ### Ingest a raw session

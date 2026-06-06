@@ -162,6 +162,7 @@ fn packaged_skill_file_is_available_for_agent_installers() {
     assert!(skill.contains("thought-castle validate"));
     assert!(skill.contains("thought-castle ingest"));
     assert!(skill.contains("thought-castle source list"));
+    assert!(skill.contains("thought-castle sync"));
     assert!(skill.contains("thought-castle ingest manual"));
     assert!(skill.contains("thought-castle note new"));
 }
@@ -173,6 +174,7 @@ fn readme_documents_source_list_and_manual_ingest_commands() {
         .unwrap_or_else(|error| panic!("README should be readable at {readme_path:?}: {error}"));
 
     assert!(readme.contains("cargo run -- source list"));
+    assert!(readme.contains("cargo run -- sync"));
     assert!(readme.contains("cargo run -- ingest manual"));
 }
 

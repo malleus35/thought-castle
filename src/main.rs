@@ -71,6 +71,12 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             let root = flags.required("--root")?;
             list_sources(Path::new(lab), provider, Path::new(root))
         }
+        [command, lab, rest @ ..] if command == "sync" => {
+            let flags = Flags::parse(rest)?;
+            let provider = flags.required("--provider")?;
+            let root = flags.required("--root")?;
+            sync_sources(Path::new(lab), provider, Path::new(root))
+        }
         [command, subcommand, lab, rest @ ..] if command == "ingest" && subcommand == "manual" => {
             let flags = Flags::parse(rest)?;
             let provider = flags.required("--provider")?;
@@ -111,7 +117,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
+            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
                 .to_string(),
         )),
     }
@@ -119,7 +125,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
     );
 }
 
@@ -305,6 +311,84 @@ fn list_sources(lab: &Path, provider: &str, root: &Path) -> CliResult<()> {
         println!("- {}", candidate.display());
     }
     Ok(())
+}
+
+fn sync_sources(lab: &Path, provider: &str, root: &Path) -> CliResult<()> {
+    if !lab.is_dir() {
+        return Err(CliError::Usage(format!(
+            "lab path must be an initialized directory: {}",
+            lab.display()
+        )));
+    }
+
+    let mut candidates = discover_provider_sources(provider, root)?;
+    candidates.sort();
+
+    let raw_dir = lab.join("00_raw-sessions").join(provider);
+    fs::create_dir_all(&raw_dir).map_err(CliError::Io)?;
+
+    let mut synced = 0usize;
+    let mut skipped = 0usize;
+    for candidate in candidates.iter() {
+        let filename = candidate
+            .file_name()
+            .and_then(|value| value.to_str())
+            .ok_or_else(|| CliError::Usage("source must have a valid file name".to_string()))?;
+        let destination = raw_dir.join(filename);
+        if destination.exists() {
+            skipped += 1;
+            continue;
+        }
+
+        let bytes = fs::read(candidate).map_err(CliError::Io)?;
+        fs::write(&destination, &bytes).map_err(CliError::Io)?;
+        write_sync_metadata(&raw_dir, filename, provider, candidate, &bytes)?;
+        synced += 1;
+    }
+
+    println!("provider: {provider}");
+    println!("root: {}", root.display());
+    println!("candidates: {}", candidates.len());
+    println!("synced: {synced}");
+    println!("skipped: {skipped}");
+    Ok(())
+}
+
+fn write_sync_metadata(
+    raw_dir: &Path,
+    filename: &str,
+    provider: &str,
+    source: &Path,
+    bytes: &[u8],
+) -> CliResult<()> {
+    let metadata = format!(
+        concat!(
+            "{{\n",
+            "  \"provider\": \"{}\",\n",
+            "  \"source_type\": \"automatic_session\",\n",
+            "  \"original_filename\": \"{}\",\n",
+            "  \"source_path\": \"{}\",\n",
+            "  \"byte_len\": {},\n",
+            "  \"content_hash\": \"{}\"\n",
+            "}}\n"
+        ),
+        json_escape(provider),
+        json_escape(filename),
+        json_escape(&source.to_string_lossy()),
+        bytes.len(),
+        content_hash(bytes)
+    );
+    fs::write(raw_dir.join(format!("{filename}.meta.json")), metadata).map_err(CliError::Io)
+}
+
+fn discover_provider_sources(provider: &str, root: &Path) -> CliResult<Vec<PathBuf>> {
+    match provider {
+        "codex" | "claude-code" | "pi-agent" => discover_by_extension(root, "jsonl"),
+        "opencode" => discover_by_filename(root, "opencode.db"),
+        _ => Err(CliError::Usage(
+            "provider must be one of: codex, claude-code, opencode, pi-agent".to_string(),
+        )),
+    }
 }
 
 fn discover_by_extension(root: &Path, extension: &str) -> CliResult<Vec<PathBuf>> {
