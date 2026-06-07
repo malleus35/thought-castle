@@ -20,8 +20,17 @@ thought-castle ingest manual <lab> --provider <name> --title <title> --file <pat
 thought-castle session normalize <lab> <raw-file> --title <title> --source-type <type>
 thought-castle note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>
 thought-castle skill print
+thought-castle skill install
 thought-castle skill install --target <skills-dir>
 ```
+
+`thought-castle skill install` defaults to installing into all supported local agent skill directories:
+- Pi Agent: `~/.pi/agent/skills/`
+- Claude Code: `~/.claude/skills/`
+- Codex: `${CODEX_HOME:-~/.codex}/skills/`
+- Shared Agent Skills: `~/.agents/skills/`
+
+Use `--target <skills-dir>` for a single custom directory. Pi Agent's global extension directory is `~/.pi/agent/extensions/`, but Thought Castle currently ships a skill rather than a TypeScript extension.
 
 ## Operating Rules
 

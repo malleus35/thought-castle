@@ -106,13 +106,16 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
         {
             install_skill(Path::new(target))
         }
+        [command, subcommand] if command == "skill" && subcommand == "install" => {
+            install_skill_to_default_agent_dirs()
+        }
         [command, subcommand, target]
             if command == "skill" && subcommand == "install" && !target.starts_with('-') =>
         {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
+            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install [--target <path>]"
                 .to_string(),
         )),
     }
@@ -120,7 +123,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
     );
 }
 
@@ -188,6 +191,33 @@ fn install_skill(target: &Path) -> CliResult<()> {
     fs::write(skill_dir.join("SKILL.md"), SKILL_MD).map_err(CliError::Io)?;
     println!("installed: {}", skill_dir.join("SKILL.md").display());
     Ok(())
+}
+
+fn install_skill_to_default_agent_dirs() -> CliResult<()> {
+    for target in default_agent_skill_dirs()? {
+        install_skill(&target)?;
+    }
+    Ok(())
+}
+
+fn default_agent_skill_dirs() -> CliResult<Vec<PathBuf>> {
+    let home = env::var_os("HOME").ok_or_else(|| {
+        CliError::Usage(
+            "HOME is not set; pass an explicit target with skill install --target <path>"
+                .to_string(),
+        )
+    })?;
+    let home = PathBuf::from(home);
+    let codex_home = env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".codex"));
+
+    Ok(vec![
+        home.join(".pi").join("agent").join("skills"),
+        home.join(".claude").join("skills"),
+        codex_home.join("skills"),
+        home.join(".agents").join("skills"),
+    ])
 }
 
 fn ingest_raw(lab: &Path, source: &Path, provider: &str, source_type: &str) -> CliResult<()> {

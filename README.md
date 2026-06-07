@@ -140,8 +140,17 @@ The installable agent skill source lives at `skills/thought-castle/SKILL.md`.
 
 ```bash
 thought-castle skill print
-thought-castle skill install --target ~/.agents/skills
+thought-castle skill install
 ```
+
+By default, `thought-castle skill install` installs the skill into the default directories for the local agent harnesses Thought Castle supports:
+
+- Pi Agent: `~/.pi/agent/skills/`
+- Claude Code: `~/.claude/skills/`
+- Codex: `${CODEX_HOME:-~/.codex}/skills/`
+- Shared Agent Skills: `~/.agents/skills/`
+
+Use `--target <path>` only when you want to install into one custom skill directory. Pi Agent's global extension directory is `~/.pi/agent/extensions/`, but Thought Castle currently ships a skill, not a Pi TypeScript extension.
 
 ## After Install And Vault Creation
 
