@@ -131,10 +131,16 @@ fn skill_print_outputs_installable_skill_markdown() {
 #[test]
 fn skill_install_writes_skill_to_explicit_target() {
     let target = temp_path("skills");
+    let home = temp_path("explicit-home");
+    let codex_home = temp_path("explicit-codex-home");
+    fs::create_dir_all(&home).expect("home fixture should be created");
+    fs::create_dir_all(&codex_home).expect("codex home fixture should be created");
 
     let output = Command::new(cli())
         .args(["skill", "install", "--target"])
         .arg(&target)
+        .env("HOME", &home)
+        .env("CODEX_HOME", &codex_home)
         .output()
         .expect("failed to run skill install");
 
@@ -151,8 +157,59 @@ fn skill_install_writes_skill_to_explicit_target() {
     let skill = fs::read_to_string(skill_path).expect("installed skill should be readable");
     assert!(skill.contains("name: thought-castle"));
     assert!(skill.contains("thought-castle validate"));
+    assert_not_exists(home.join(".pi").join("agent").join("skills"));
+    assert_not_exists(home.join(".claude").join("skills"));
+    assert_not_exists(codex_home.join("skills"));
+    assert_not_exists(home.join(".agents").join("skills"));
 
     fs::remove_dir_all(target).ok();
+    fs::remove_dir_all(home).ok();
+    fs::remove_dir_all(codex_home).ok();
+}
+
+#[test]
+fn skill_install_without_target_installs_to_default_agent_skill_dirs() {
+    let home = temp_path("home");
+    let codex_home = temp_path("codex-home");
+    fs::create_dir_all(&home).expect("home fixture should be created");
+    fs::create_dir_all(&codex_home).expect("codex home fixture should be created");
+
+    let output = Command::new(cli())
+        .args(["skill", "install"])
+        .env("HOME", &home)
+        .env("CODEX_HOME", &codex_home)
+        .output()
+        .expect("failed to run skill install without target");
+
+    assert!(
+        output.status.success(),
+        "skill install should succeed with default target\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let expected_targets = [
+        home.join(".pi").join("agent").join("skills"),
+        home.join(".claude").join("skills"),
+        codex_home.join("skills"),
+        home.join(".agents").join("skills"),
+    ];
+
+    for target in expected_targets {
+        let skill_path = target.join("thought-castle").join("SKILL.md");
+        assert_exists(&skill_path);
+        let skill = fs::read_to_string(skill_path).expect("installed skill should be readable");
+        assert!(skill.contains("name: thought-castle"));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(".pi/agent/skills"));
+    assert!(stdout.contains(".claude/skills"));
+    assert!(stdout.contains("codex-home"));
+    assert!(stdout.contains(".agents/skills"));
+
+    fs::remove_dir_all(home).ok();
+    fs::remove_dir_all(codex_home).ok();
 }
 
 #[test]
@@ -187,6 +244,11 @@ fn readme_documents_installation_archive_scope_and_usage() {
     assert!(readme.contains("thought-castle source list"));
     assert!(readme.contains("thought-castle sync"));
     assert!(readme.contains("thought-castle ingest manual"));
+    assert!(readme.contains("thought-castle skill install"));
+    assert!(readme.contains("~/.pi/agent/skills/"));
+    assert!(readme.contains("~/.claude/skills/"));
+    assert!(readme.contains("${CODEX_HOME:-~/.codex}/skills/"));
+    assert!(readme.contains("~/.agents/skills/"));
     assert!(readme.contains("Karpathy LLM Wiki"));
     assert!(readme.contains("graphify"));
     assert!(!readme.contains("40_posts"));
