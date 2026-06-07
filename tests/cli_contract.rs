@@ -23,6 +23,14 @@ fn assert_exists(path: impl AsRef<Path>) {
     );
 }
 
+fn assert_not_exists(path: impl AsRef<Path>) {
+    assert!(
+        !path.as_ref().exists(),
+        "expected path not to exist: {}",
+        path.as_ref().display()
+    );
+}
+
 #[test]
 fn init_creates_core_vault_structure_and_templates() {
     let target = temp_path("init");
@@ -46,32 +54,31 @@ fn init_creates_core_vault_structure_and_templates() {
         "10_knowledge",
         "20_thoughts",
         "30_ideas",
-        "40_posts/linkedin",
-        "40_posts/x.com",
-        "40_posts/published",
         "_templates",
         "_system",
     ] {
         assert_exists(target.join(directory));
     }
+    assert_not_exists(target.join("40_posts"));
 
     for template in [
         "_templates/10_knowledge.md",
         "_templates/20_thought.md",
         "_templates/30_idea.md",
-        "_templates/40_post.md",
     ] {
         assert_exists(target.join(template));
     }
+    assert_not_exists(target.join("_templates/40_post.md"));
 
     let thought_template = fs::read_to_string(target.join("_templates/20_thought.md"))
         .expect("thought template should be readable");
     assert!(thought_template.contains("source_refs: []"));
     assert!(thought_template.contains("user_confirmed: false"));
 
-    let post_template = fs::read_to_string(target.join("_templates/40_post.md"))
-        .expect("post template should be readable");
-    assert!(post_template.contains("## Review Checklist"));
+    let source_schema = fs::read_to_string(target.join("_system/source-reference-schema.md"))
+        .expect("source schema should be readable");
+    assert!(source_schema.contains("knowledge`, `thought`, or `idea"));
+    assert!(!source_schema.contains("post"));
 
     fs::remove_dir_all(target).ok();
 }
@@ -165,17 +172,26 @@ fn packaged_skill_file_is_available_for_agent_installers() {
     assert!(skill.contains("thought-castle sync"));
     assert!(skill.contains("thought-castle ingest manual"));
     assert!(skill.contains("thought-castle note new"));
+    assert!(!skill.contains("note new post"));
+    assert!(!skill.contains("40_posts"));
 }
 
 #[test]
-fn readme_documents_source_list_and_manual_ingest_commands() {
+fn readme_documents_installation_archive_scope_and_usage() {
     let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md");
     let readme = fs::read_to_string(&readme_path)
         .unwrap_or_else(|error| panic!("README should be readable at {readme_path:?}: {error}"));
 
-    assert!(readme.contains("cargo run -- source list"));
-    assert!(readme.contains("cargo run -- sync"));
-    assert!(readme.contains("cargo run -- ingest manual"));
+    assert!(readme.contains("brew install malleus35/tap/thought-castle"));
+    assert!(readme.contains("verified knowledge archive"));
+    assert!(readme.contains("thought-castle source list"));
+    assert!(readme.contains("thought-castle sync"));
+    assert!(readme.contains("thought-castle ingest manual"));
+    assert!(readme.contains("Karpathy LLM Wiki"));
+    assert!(readme.contains("graphify"));
+    assert!(!readme.contains("40_posts"));
+    assert!(!readme.contains("LinkedIn"));
+    assert!(!readme.contains("x.com"));
 }
 
 #[test]
@@ -570,7 +586,7 @@ fn note_new_creates_thought_draft_with_source_trace() {
 }
 
 #[test]
-fn note_new_creates_platform_post_draft() {
+fn note_new_rejects_post_kind() {
     let lab = temp_path("post-note");
     let init = Command::new(cli())
         .arg("init")
@@ -585,8 +601,6 @@ fn note_new_creates_platform_post_draft() {
         .args([
             "--title",
             "Process Erasure",
-            "--platform",
-            "linkedin",
             "--session",
             "[[01_sessions/example.md#^t0040]]",
             "--raw-file",
@@ -596,22 +610,16 @@ fn note_new_creates_platform_post_draft() {
         .expect("failed to run note new post");
 
     assert!(
-        output.status.success(),
-        "note new post should succeed\nstdout:\n{}\nstderr:\n{}",
+        !output.status.success(),
+        "note new post should fail\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-
-    let note_path = lab
-        .join("40_posts")
-        .join("linkedin")
-        .join("process-erasure.md");
-    assert_exists(&note_path);
-    let note = fs::read_to_string(note_path).expect("post note should be readable");
-    assert!(note.contains("platform: linkedin"));
-    assert!(note.contains("session: \"[[01_sessions/example.md#^t0040]]\""));
-    assert!(note.contains("## Review Checklist"));
-    assert!(note.contains("# Process Erasure"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("note kind must be one of: knowledge, thought, idea")
+    );
+    assert_not_exists(lab.join("40_posts"));
 
     fs::remove_dir_all(lab).ok();
 }
@@ -664,6 +672,7 @@ fn session_normalize_creates_canonical_markdown_with_block_id() {
     assert!(session.contains("raw_file: 00_raw-sessions/manual-session.txt"));
     assert!(session.contains("### t0001 source ^t0001"));
     assert!(session.contains("중심극한정리가 뭐지?"));
+    assert!(!session.contains("Post Candidates"));
 
     fs::remove_dir_all(lab).ok();
 }
