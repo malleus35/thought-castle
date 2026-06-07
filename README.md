@@ -143,6 +143,24 @@ thought-castle skill print
 thought-castle skill install --target ~/.agents/skills
 ```
 
+## After Install And Vault Creation
+
+After you install the CLI and create a vault, ask an agent to run the Thought Castle archive intake workflow. The agent should handle the document-management loop:
+
+- sync automatic local sessions from Codex, Claude Code, OpenCode, and Pi Agent
+- paste a copied transcript from ChatGPT, Claude, Perplexity, or another app into chat and let the agent save it as a manual capture
+- normalize new raw sessions into `01_sessions`
+- create traceable `knowledge`, `thought`, and `idea` drafts with `source_refs`
+- report what still needs human verification or confirmation
+
+Example prompt:
+
+```text
+Use the thought-castle skill in this vault.
+Sync Codex and Pi Agent sessions.
+Also save the pasted ChatGPT transcript below as a manual capture, normalize it, and create only high-signal knowledge/thought/idea drafts.
+```
+
 ## References
 
 - [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)

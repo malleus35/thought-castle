@@ -39,6 +39,71 @@ thought-castle skill install --target <skills-dir>
 3. Preserve source traceability when creating derived notes.
 4. Use draft/candidate/raw statuses until the user approves promotion.
 
+## Archive Intake Run
+
+Use this workflow when the user has already installed `thought-castle`, already created a vault, and wants the agent to handle session/document management.
+
+The user owns installation and vault creation. The agent owns session intake after that point.
+
+### Inputs
+
+Accept any combination of:
+
+- a vault path, or use the current directory when it validates
+- requested automatic providers: `codex`, `claude-code`, `opencode`, `pi-agent`
+- pasted web or desktop transcript text
+- provider name for pasted text, such as `chatgpt`, `claude`, or `perplexity`
+- optional title, topic hints, and note kinds to extract
+
+If the provider or title is missing but inferable from the pasted text, choose a conservative value and report it. Ask only when the missing value would make the archive ambiguous.
+
+### Steps
+
+1. Validate the vault with `thought-castle validate <vault>`.
+2. sync automatic local sessions for requested providers:
+   - `thought-castle source list <vault> --provider codex --root ~/.codex/sessions`
+   - `thought-castle source list <vault> --provider claude-code --root ~/.claude/projects`
+   - `thought-castle source list <vault> --provider opencode --root ~/.local/share/opencode`
+   - `thought-castle source list <vault> --provider pi-agent --root ~/.pi/agent/sessions`
+   - run matching `thought-castle sync` commands only after listing candidates
+3. For pasted transcript text, use Manual Paste Capture.
+4. Normalize newly added raw sessions with `thought-castle session normalize`.
+5. Create traceable drafts only when there is enough signal:
+   - `thought-castle note new knowledge`
+   - `thought-castle note new thought`
+   - `thought-castle note new idea`
+6. End with a short run report listing captured files, normalized sessions, created notes, skipped items, and manual follow-up.
+
+### Manual Paste Capture
+
+When the user pastes copied transcript text into chat, Save the pasted transcript before extracting from it.
+
+Preferred approach:
+
+1. Create a temporary Markdown file from the pasted text.
+2. Preserve the pasted text verbatim under a title and provider header.
+3. Run:
+
+```bash
+thought-castle ingest manual <vault> \
+  --provider <provider> \
+  --title "<title>" \
+  --file <temporary-transcript-file>
+```
+
+4. Use the copied file in `00_raw-sessions/manual/` as the raw source for normalization and notes.
+
+Do not summarize first and save only the summary. The raw pasted transcript is the source of truth.
+
+### Extraction Rules
+
+- Do not mark knowledge as `verified`; leave it as candidate until evidence is added.
+- Do not mark thoughts as `stable`; keep `user_confirmed: false` until the user confirms.
+- Treat ideas as possibilities, not facts.
+- Every created note must include `source_refs`.
+- Prefer fewer high-signal notes over many weak notes.
+- If a transcript is too messy to extract safely, normalize it and report that extraction was skipped.
+
 ## Common Tasks
 
 ### List automatic source candidates
