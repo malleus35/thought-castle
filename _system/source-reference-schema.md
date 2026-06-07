@@ -19,5 +19,5 @@ source_refs:
 
 - `session`은 Obsidian block reference를 포함해야 한다.
 - `raw_file`은 원본 파일 경로를 가리켜야 한다.
-- `extraction_type`은 `knowledge`, `thought`, `idea`, `post` 중 하나여야 한다.
+- `extraction_type`은 `knowledge`, `thought`, `idea` 중 하나여야 한다.
 - 자동 생성물은 `confidence`를 기록해야 한다.

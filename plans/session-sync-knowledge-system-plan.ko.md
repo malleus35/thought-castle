@@ -8,7 +8,7 @@
 
 ## 현재 제품 상태
 
-Thought Castle은 이미 다섯 계층의 파이프라인을 정의한다.
+Thought Castle은 이제 원본 보존과 검증 지식 아카이빙 중심의 파이프라인을 정의한다.
 
 ```text
 00_raw-sessions  -> 원본 세션 보존
@@ -16,7 +16,6 @@ Thought Castle은 이미 다섯 계층의 파이프라인을 정의한다.
 10_knowledge     -> 객관 지식 후보와 검증된 사실
 20_thoughts      -> 사용자의 이해, 판단, 감정, 맥락
 30_ideas         -> 창의적 조합과 실험 후보
-40_posts         -> 플랫폼별 초안과 발행 기록
 ```
 
 현재 Rust CLI가 지원하는 기능은 다음과 같다.
@@ -25,7 +24,7 @@ Thought Castle은 이미 다섯 계층의 파이프라인을 정의한다.
 - `validate`: 필수 폴더/템플릿과 기본 invariant 검증
 - `ingest`: raw 파일을 `00_raw-sessions`로 복사하고 metadata sidecar 작성
 - `session normalize`: 최소 형태의 canonical Markdown session 생성
-- `note new`: `knowledge`, `thought`, `idea`, `post` 초안 생성 및 `source_refs` 주입
+- `note new`: `knowledge`, `thought`, `idea` 초안 생성 및 `source_refs` 주입
 - `skill print`, `skill install`: Thought Castle agent skill 출력/설치
 
 현재 테스트는 통과하지만, provider별 session sync, topic routing, claim extraction, evidence verification, graphify 연동은 아직 구현되지 않았다.
@@ -400,7 +399,7 @@ learning_intent:
 
 완료 기준:
 
-- `verified`, `stable`, `published` 상태는 gate 조건 없이는 막힌다.
+- `verified`, `stable` 상태는 gate 조건 없이는 막힌다.
 - graphify report는 생성 가능하지만 자동으로 canonical truth가 되지 않는다.
 
 ## Privacy and Safety Rules

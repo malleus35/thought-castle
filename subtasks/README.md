@@ -14,13 +14,11 @@
 - [ ] knowledge candidate 추출 규칙 작성
 - [ ] thought draft 추출 규칙 작성
 - [ ] idea generation method 목록 작성
-- [ ] post draft 변환 규칙 작성
 
 ## Milestone 3: Human Gates
 
 - [ ] knowledge `verified` 승격 조건 작성
 - [ ] thought `stable` 승인 조건 작성
-- [ ] post `published` 승인 조건 작성
 - [ ] discarded/archive 규칙 작성
 
 ## Milestone 4: Automation

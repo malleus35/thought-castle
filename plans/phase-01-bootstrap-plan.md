@@ -10,7 +10,7 @@ Thought Castle의 수동/자동 경계를 먼저 고정하고, 이후 parser와 
 - PRD
 - Task documents
 - Subtask checklists
-- 10/20/30/40 templates
+- 10/20/30 templates
 - Source reference schema
 - Status transition rules
 
@@ -37,4 +37,4 @@ Thought Castle의 수동/자동 경계를 먼저 고정하고, 이후 parser와 
 - 각 core folder의 책임이 문서화되어 있다.
 - 자동 생성물과 사용자 승인물이 상태값으로 구분된다.
 - 각 template이 `source_refs`를 포함한다.
-- `20_thought`와 `40_post`가 hybrid workflow를 반영한다.
+- `20_thought`가 사용자 확인 workflow를 반영한다.

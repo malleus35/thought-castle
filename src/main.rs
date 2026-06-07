@@ -15,9 +15,6 @@ const CORE_DIRS: &[&str] = &[
     "10_knowledge",
     "20_thoughts",
     "30_ideas",
-    "40_posts/linkedin",
-    "40_posts/x.com",
-    "40_posts/published",
     "_templates",
     "_system",
     "plans",
@@ -29,7 +26,6 @@ const TEMPLATE_FILES: &[(&str, &str)] = &[
     ("_templates/10_knowledge.md", KNOWLEDGE_TEMPLATE),
     ("_templates/20_thought.md", THOUGHT_TEMPLATE),
     ("_templates/30_idea.md", IDEA_TEMPLATE),
-    ("_templates/40_post.md", POST_TEMPLATE),
 ];
 
 const SYSTEM_FILES: &[(&str, &str)] = &[
@@ -103,8 +99,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             let title = flags.required("--title")?;
             let session = flags.required("--session")?;
             let raw_file = flags.required("--raw-file")?;
-            let platform = flags.optional("--platform");
-            create_note(Path::new(lab), kind, title, session, raw_file, platform)
+            create_note(Path::new(lab), kind, title, session, raw_file)
         }
         [command, subcommand, flag, target]
             if command == "skill" && subcommand == "install" && flag == "--target" =>
@@ -117,7 +112,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <kind> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
+            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install --target <path>"
                 .to_string(),
         )),
     }
@@ -125,7 +120,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <kind> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install --target <path>"
     );
 }
 
@@ -172,13 +167,6 @@ fn validate_lab(root: &Path) -> CliResult<ValidationReport> {
         {
             invalid.push(format!(
                 "{} must contain user_confirmed: false",
-                path.display()
-            ));
-        }
-
-        if *relative_path == "_templates/40_post.md" && !contents.contains("## Review Checklist") {
-            invalid.push(format!(
-                "{} must contain ## Review Checklist",
                 path.display()
             ));
         }
@@ -446,7 +434,6 @@ fn create_note(
     title: &str,
     session: &str,
     raw_file: &str,
-    platform: Option<&str>,
 ) -> CliResult<()> {
     let slug = slugify(title);
     let extraction_type = kind;
@@ -467,23 +454,15 @@ fn create_note(
         "knowledge" => ("10_knowledge".to_string(), KNOWLEDGE_TEMPLATE),
         "thought" => ("20_thoughts".to_string(), THOUGHT_TEMPLATE),
         "idea" => ("30_ideas".to_string(), IDEA_TEMPLATE),
-        "post" => {
-            let platform = platform.unwrap_or("linkedin");
-            (format!("40_posts/{platform}"), POST_TEMPLATE)
-        }
         _ => {
             return Err(CliError::Usage(
-                "note kind must be one of: knowledge, thought, idea, post".to_string(),
+                "note kind must be one of: knowledge, thought, idea".to_string(),
             ));
         }
     };
 
     let mut note = template.replace("source_refs: []", &source_refs);
     note = note.replace("# Title", &format!("# {title}"));
-    if kind == "post" {
-        let platform = platform.unwrap_or("linkedin");
-        note = note.replace("platform:\n", &format!("platform: {platform}\n"));
-    }
 
     let directory = lab.join(relative_dir);
     fs::create_dir_all(&directory).map_err(CliError::Io)?;
@@ -519,8 +498,7 @@ fn normalize_session(lab: &Path, raw_file: &Path, title: &str, source_type: &str
             "## Extracted Candidates\n\n",
             "### Knowledge Candidates\n\n",
             "### Thought Candidates\n\n",
-            "### Idea Candidates\n\n",
-            "### Post Candidates\n"
+            "### Idea Candidates\n"
         ),
         source_type, raw_relative, title, raw_text
     );
@@ -783,39 +761,6 @@ tags:
 ## Source Trace
 "#;
 
-const POST_TEMPLATE: &str = r#"---
-type: post
-platform:
-status: draft
-source_refs: []
-linked_notes: []
-published_url:
-published_at:
-tags:
-  - type/post
----
-
-# Title
-
-## Core Message
-
-## Audience
-
-## Draft
-
-## Platform Version
-
-## Review Checklist
-
-- [ ] Clear claim
-- [ ] Concrete example
-- [ ] No unsupported fact
-- [ ] Source trace exists
-- [ ] Platform length checked
-
-## Published Result
-"#;
-
 const SOURCE_REFERENCE_SCHEMA: &str = r#"# Source Reference Schema
 
 ## Purpose
@@ -832,6 +777,10 @@ source_refs:
     extraction_type: knowledge
     confidence: medium
 ```
+
+## Rules
+
+- `extraction_type` must be `knowledge`, `thought`, or `idea`.
 "#;
 
 const STATUS_TRANSITION_RULES: &str = r#"# Status Transition Rules
@@ -856,13 +805,6 @@ draft -> discarded
 ```text
 raw -> reviewing -> experimenting -> validated
 raw -> discarded
-```
-
-## Post
-
-```text
-draft -> reviewing -> scheduled -> published
-draft -> archived
 ```
 "#;
 

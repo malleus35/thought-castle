@@ -9,7 +9,6 @@
 - [ ] non-obviousness 평가 기준 작성
 - [ ] risk 평가 기준 작성
 - [ ] smallest next experiment 정의
-- [ ] idea-to-post 전환 기준 작성
 - [ ] idea-to-project 전환 기준 작성
 
 ## Done When

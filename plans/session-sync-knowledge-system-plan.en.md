@@ -8,7 +8,7 @@ The product direction is now broader than an idea generator. Idea generation rem
 
 ## Current Product State
 
-Thought Castle already defines a five-layer pipeline:
+Thought Castle now defines a source-preserving, archive-first pipeline:
 
 ```text
 00_raw-sessions  -> immutable source capture
@@ -16,7 +16,6 @@ Thought Castle already defines a five-layer pipeline:
 10_knowledge     -> objective knowledge candidates and verified facts
 20_thoughts      -> subjective understanding, judgments, and personal context
 30_ideas         -> creative combinations and experiment candidates
-40_posts         -> platform-specific drafts and publication records
 ```
 
 The Rust CLI currently supports:
@@ -25,7 +24,7 @@ The Rust CLI currently supports:
 - `validate`: verify required folders/templates and basic invariants.
 - `ingest`: copy a raw file into `00_raw-sessions` and write a metadata sidecar.
 - `session normalize`: create a minimal canonical Markdown session with a stable block id.
-- `note new`: create `knowledge`, `thought`, `idea`, or `post` drafts with `source_refs`.
+- `note new`: create `knowledge`, `thought`, or `idea` drafts with `source_refs`.
 - `skill print` and `skill install`: expose an installable Thought Castle agent skill.
 
 The current tests pass, but provider-specific session sync, topic routing, claim extraction, evidence verification, and graph integration are not implemented yet.
@@ -397,7 +396,7 @@ Tasks:
 
 Acceptance:
 
-- `verified`, `stable`, and `published` states are blocked unless gates are satisfied.
+- `verified` and `stable` states are blocked unless gates are satisfied.
 - graphify reports can be produced without becoming canonical truth automatically.
 
 ## Privacy and Safety Rules

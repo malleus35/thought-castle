@@ -2,11 +2,11 @@
 
 ## Purpose
 
-AI와 사람의 대화에서 지식, 생각, 아이디어, 포스팅 초안을 추출하고, 각 산출물이 원본 대화의 어느 지점에서 왔는지 추적 가능한 개인 지식/창의 시스템을 만든다.
+AI와 사람의 대화에서 지식, 생각, 아이디어를 추출하고, 각 산출물이 원본 대화의 어느 지점에서 왔는지 추적 가능한 검증 지식 아카이브를 만든다.
 
 ## Product Definition
 
-Thought Castle은 다음 다섯 계층을 가진다.
+Thought Castle은 다음 네 계층의 산출물과 원본 보존 계층을 가진다.
 
 ```text
 00_raw-sessions  원본 보존
@@ -14,20 +14,19 @@ Thought Castle은 다음 다섯 계층을 가진다.
 10_knowledge     객관 지식 후보/검증 지식
 20_thoughts      주관적 생각/감정/판단
 30_ideas         조합형 아이디어/실험 후보
-40_posts         LinkedIn/X 발행 초안 및 결과
 ```
 
 ## Users
 
 - Primary user: 개인 지식 저장소를 운영하는 사용자
 - AI agent: raw session을 정규화하고 후보 산출물을 생성하는 자동화 실행자
-- Future reader: 특정 생각, 지식, 포스트가 어떤 대화에서 나왔는지 검토하는 사용자
+- Future reader: 특정 생각, 지식, 아이디어가 어떤 대화에서 나왔는지 검토하는 사용자
 
 ## Non-Goals
 
 - 모든 내용을 자동으로 사실로 확정하지 않는다.
 - `20_thoughts`를 사용자 승인 없이 최종 생각으로 간주하지 않는다.
-- `40_posts`를 사용자 승인 없이 발행하지 않는다.
+- 외부 게시나 배포 기능을 핵심 제품 범위에 포함하지 않는다.
 - 원본 raw session을 덮어쓰거나 변형하지 않는다.
 
 ## Source Inputs
@@ -58,7 +57,7 @@ Example:
 
 ### R3. Source Traceability
 
-`10_knowledge`, `20_thoughts`, `30_ideas`, `40_posts`의 모든 파일은 `source_refs`를 가져야 한다.
+`10_knowledge`, `20_thoughts`, `30_ideas`의 모든 파일은 `source_refs`를 가져야 한다.
 
 ### R4. Knowledge Verification Gate
 
@@ -72,9 +71,9 @@ Example:
 
 `30_ideas`는 자동 생성 중심이다. 단, 모든 idea는 `inputs`와 `source_refs`를 가져야 한다.
 
-### R7. Post Publishing Gate
+### R7. Archive-Only Scope
 
-`40_posts`는 자동 초안 생성이 가능하지만 발행 전 사용자 검토가 필요하다. `published` 상태에는 URL과 발행일이 있어야 한다.
+Thought Castle의 기본 제품 범위는 검증 가능한 지식 아카이빙이다. 외부 게시물 생성, 예약, 발행 추적은 제외한다.
 
 ## Folder Responsibilities
 
@@ -85,7 +84,6 @@ Example:
 | `10_knowledge` | 객관 지식 추출 | high | verified 승격 |
 | `20_thoughts` | 주관 생각 초안 | medium | stable 승인 |
 | `30_ideas` | 창의 조합 생성 | high | 채택/폐기 |
-| `40_posts` | 플랫폼 초안/발행 기록 | medium | 발행 승인 |
 
 ## Status Model
 
@@ -111,23 +109,14 @@ Example:
 - `validated`: 유지할 가치 확인
 - `discarded`: 폐기
 
-### Post
-
-- `draft`: 초안
-- `reviewing`: 검토 중
-- `scheduled`: 발행 예정
-- `published`: 발행 완료
-- `archived`: 보관
-
 ## Acceptance Criteria
 
 - `plans/thought-castle-prd.md`가 존재한다.
 - `tasks/`에 주요 작업 단위가 분리되어 있다.
 - `subtasks/`에 실행 가능한 체크리스트가 있다.
-- `_templates/10_knowledge.md`, `_templates/20_thought.md`, `_templates/30_idea.md`, `_templates/40_post.md`가 존재한다.
+- `_templates/10_knowledge.md`, `_templates/20_thought.md`, `_templates/30_idea.md`가 존재한다.
 - 각 템플릿은 `source_refs`를 포함한다.
 - `20_thought`는 사용자 승인 필드를 포함한다.
-- `40_post`는 발행 전 checklist와 발행 결과 필드를 포함한다.
 
 ## Open Questions
 
