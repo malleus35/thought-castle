@@ -195,6 +195,43 @@ fn readme_documents_installation_archive_scope_and_usage() {
 }
 
 #[test]
+fn readme_delegates_archive_intake_to_the_agent_skill_after_vault_creation() {
+    let readme_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md");
+    let readme = fs::read_to_string(&readme_path)
+        .unwrap_or_else(|error| panic!("README should be readable at {readme_path:?}: {error}"));
+
+    assert!(readme.contains("After Install And Vault Creation"));
+    assert!(readme.contains("ask an agent to run the Thought Castle archive intake workflow"));
+    assert!(readme.contains("paste a copied transcript"));
+    assert!(readme.contains("sync automatic local sessions"));
+    assert!(readme.contains("normalize new raw sessions"));
+}
+
+#[test]
+fn packaged_skill_defines_archive_intake_workflow_for_agents() {
+    let skill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("skills")
+        .join("thought-castle")
+        .join("SKILL.md");
+
+    let skill = fs::read_to_string(&skill_path)
+        .unwrap_or_else(|error| panic!("skill file should be readable at {skill_path:?}: {error}"));
+
+    assert!(skill.contains("Archive Intake Run"));
+    assert!(skill.contains("The user owns installation and vault creation"));
+    assert!(skill.contains("sync automatic local sessions"));
+    assert!(skill.contains("Manual Paste Capture"));
+    assert!(skill.contains("Save the pasted transcript"));
+    assert!(skill.contains("thought-castle ingest manual"));
+    assert!(skill.contains("thought-castle session normalize"));
+    assert!(skill.contains("thought-castle note new knowledge"));
+    assert!(skill.contains("thought-castle note new thought"));
+    assert!(skill.contains("thought-castle note new idea"));
+    assert!(skill.contains("Do not mark knowledge as `verified`"));
+    assert!(skill.contains("Do not mark thoughts as `stable`"));
+}
+
+#[test]
 fn ingest_copies_raw_file_and_writes_metadata_sidecar() {
     let lab = temp_path("ingest-lab");
     let source_dir = temp_path("ingest-source");
