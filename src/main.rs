@@ -53,6 +53,14 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             print_help();
             Ok(())
         }
+        [flag] if flag == "--help" || flag == "-h" => {
+            print_help();
+            Ok(())
+        }
+        [flag] if flag == "--version" => {
+            print_version();
+            Ok(())
+        }
         [command, path] if command == "init" => init_lab(Path::new(path)),
         [command, path] if command == "validate" => validate_lab(Path::new(path)).map(|report| {
             println!("valid: {}", report.summary());
@@ -63,18 +71,21 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
         }
         [command, subcommand, lab, rest @ ..] if command == "source" && subcommand == "list" => {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--provider", "--root"])?;
             let provider = flags.required("--provider")?;
             let root = flags.required("--root")?;
             list_sources(Path::new(lab), provider, Path::new(root))
         }
         [command, lab, rest @ ..] if command == "sync" => {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--provider", "--root"])?;
             let provider = flags.required("--provider")?;
             let root = flags.required("--root")?;
             sync_sources(Path::new(lab), provider, Path::new(root))
         }
         [command, subcommand, lab, rest @ ..] if command == "ingest" && subcommand == "manual" => {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--provider", "--title", "--file"])?;
             let provider = flags.required("--provider")?;
             let title = flags.required("--title")?;
             let source = flags.required("--file")?;
@@ -82,6 +93,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
         }
         [command, lab, source, rest @ ..] if command == "ingest" => {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--provider", "--source-type"])?;
             let provider = flags.required("--provider")?;
             let source_type = flags.required("--source-type")?;
             ingest_raw(Path::new(lab), Path::new(source), provider, source_type)
@@ -90,12 +102,14 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             if command == "session" && subcommand == "normalize" =>
         {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--title", "--source-type"])?;
             let title = flags.required("--title")?;
             let source_type = flags.required("--source-type")?;
             normalize_session(Path::new(lab), Path::new(raw_file), title, source_type)
         }
         [command, subcommand, kind, lab, rest @ ..] if command == "note" && subcommand == "new" => {
             let flags = Flags::parse(rest)?;
+            flags.reject_unless(&["--title", "--session", "--raw-file"])?;
             let title = flags.required("--title")?;
             let session = flags.required("--session")?;
             let raw_file = flags.required("--raw-file")?;
@@ -125,6 +139,10 @@ fn print_help() {
     println!(
         "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
     );
+}
+
+fn print_version() {
+    println!("thought-castle {}", env!("CARGO_PKG_VERSION"));
 }
 
 fn init_lab(root: &Path) -> CliResult<()> {
@@ -648,21 +666,39 @@ struct Flags<'a> {
 impl<'a> Flags<'a> {
     fn parse(args: &'a [String]) -> CliResult<Self> {
         let mut values = Vec::new();
-        let mut chunks = args.chunks_exact(2);
-        for chunk in &mut chunks {
-            let flag = chunk[0].as_str();
-            let value = chunk[1].as_str();
+        let mut index = 0usize;
+        while index < args.len() {
+            let argument = args[index].as_str();
+            let (flag, value, consumed) = if let Some((flag, value)) = argument.split_once('=') {
+                (flag, value, 1usize)
+            } else {
+                let Some(value) = args.get(index + 1) else {
+                    return Err(CliError::Usage(
+                        "flags must be passed as --name value pairs".to_string(),
+                    ));
+                };
+                (argument, value.as_str(), 2usize)
+            };
+
             if !flag.starts_with("--") {
                 return Err(CliError::Usage(format!("expected flag, got: {flag}")));
             }
+            if values.iter().any(|(existing, _)| *existing == flag) {
+                return Err(CliError::Usage(format!("duplicate flag: {flag}")));
+            }
             values.push((flag, value));
-        }
-        if !chunks.remainder().is_empty() {
-            return Err(CliError::Usage(
-                "flags must be passed as --name value pairs".to_string(),
-            ));
+            index += consumed;
         }
         Ok(Self { values })
+    }
+
+    fn reject_unless(&self, allowed: &[&str]) -> CliResult<()> {
+        for (flag, _) in &self.values {
+            if !allowed.contains(flag) {
+                return Err(CliError::Usage(format!("unknown flag: {flag}")));
+            }
+        }
+        Ok(())
     }
 
     fn required(&self, name: &str) -> CliResult<&'a str> {

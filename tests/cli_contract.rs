@@ -155,7 +155,10 @@ fn flags_support_equals_syntax_and_reject_unknown_or_duplicate_names() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before flag tests");
+    assert!(
+        init.status.success(),
+        "init should succeed before flag tests"
+    );
     fs::create_dir_all(&root).expect("source root should be created");
 
     let equals_output = Command::new(cli())
