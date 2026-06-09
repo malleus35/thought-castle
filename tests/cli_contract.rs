@@ -825,9 +825,9 @@ fn note_new_escapes_control_characters_in_source_refs_yaml() {
     assert!(note.contains(
         r#"session: "[[01_sessions/example.md#^t0001]]\nline2\t\"quote\"\\slash\u0001""#
     ));
-    assert!(note.contains(
-        r#"raw_file: "00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u0001""#
-    ));
+    assert!(
+        note.contains(r#"raw_file: "00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u0001""#)
+    );
     assert!(!note.contains("[[01_sessions/example.md#^t0001]]\nline2"));
 
     fs::remove_dir_all(lab).ok();

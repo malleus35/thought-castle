@@ -607,11 +607,31 @@ fn slugify(input: &str) -> String {
 }
 
 fn json_escape(input: &str) -> String {
-    input.replace('\\', "\\\\").replace('"', "\\\"")
+    escape_quoted_scalar(input)
 }
 
 fn yaml_escape(input: &str) -> String {
-    input.replace('\\', "\\\\").replace('"', "\\\"")
+    escape_quoted_scalar(input)
+}
+
+fn escape_quoted_scalar(input: &str) -> String {
+    let mut escaped = String::new();
+    for character in input.chars() {
+        match character {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            '\u{08}' => escaped.push_str("\\b"),
+            '\u{0c}' => escaped.push_str("\\f"),
+            character if character.is_control() => {
+                escaped.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped
 }
 
 fn relative_display(root: &Path, path: &Path) -> String {
