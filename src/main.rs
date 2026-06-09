@@ -496,7 +496,7 @@ fn create_note(
 
     let directory = lab.join(relative_dir);
     fs::create_dir_all(&directory).map_err(CliError::Io)?;
-    let destination = directory.join(format!("{slug}.md"));
+    let destination = unique_markdown_path(&directory, &slug);
     write_new(&destination, &note)?;
 
     println!("created: {}", destination.display());
@@ -533,9 +533,7 @@ fn normalize_session(lab: &Path, raw_file: &Path, title: &str, source_type: &str
         source_type, raw_relative, title, raw_text
     );
 
-    let destination = lab
-        .join("01_sessions")
-        .join(format!("{}.md", slugify(title)));
+    let destination = unique_markdown_path(&lab.join("01_sessions"), &slugify(title));
     write_new(&destination, &session)?;
     println!("normalized: {}", destination.display());
     Ok(())
@@ -564,6 +562,20 @@ fn write_new(path: &Path, contents: &str) -> CliResult<()> {
     fs::write(path, contents).map_err(CliError::Io)
 }
 
+fn unique_markdown_path(directory: &Path, slug: &str) -> PathBuf {
+    let mut candidate = directory.join(unique_markdown_filename(slug));
+    let mut suffix = 2usize;
+    while candidate.exists() {
+        candidate = directory.join(format!("{slug}-{suffix}.md"));
+        suffix += 1;
+    }
+    candidate
+}
+
+fn unique_markdown_filename(slug: &str) -> String {
+    format!("{slug}.md")
+}
+
 fn content_hash(bytes: &[u8]) -> String {
     let mut hasher = DefaultHasher::new();
     bytes.hash(&mut hasher);
@@ -575,8 +587,10 @@ fn slugify(input: &str) -> String {
     let mut last_was_dash = false;
 
     for character in input.chars() {
-        if character.is_ascii_alphanumeric() {
-            slug.push(character.to_ascii_lowercase());
+        if character.is_alphanumeric() {
+            for lowercase in character.to_lowercase() {
+                slug.push(lowercase);
+            }
             last_was_dash = false;
         } else if !last_was_dash {
             slug.push('-');
