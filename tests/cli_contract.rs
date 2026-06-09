@@ -270,6 +270,22 @@ fn readme_delegates_archive_intake_to_the_agent_skill_after_vault_creation() {
 }
 
 #[test]
+fn repository_defines_ci_for_rust_quality_gates() {
+    let workflow_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github")
+        .join("workflows")
+        .join("ci.yml");
+    let workflow = fs::read_to_string(&workflow_path)
+        .unwrap_or_else(|error| panic!("CI workflow should be readable at {workflow_path:?}: {error}"));
+
+    assert!(workflow.contains("cargo fmt --check"));
+    assert!(workflow.contains("cargo clippy --all-targets -- -D warnings"));
+    assert!(workflow.contains("cargo test"));
+    assert!(workflow.contains("ubuntu-latest"));
+    assert!(workflow.contains("macos-latest"));
+}
+
+#[test]
 fn packaged_skill_defines_archive_intake_workflow_for_agents() {
     let skill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("skills")
