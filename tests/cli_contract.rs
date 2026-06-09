@@ -111,6 +111,121 @@ fn validate_reports_initialized_lab_as_valid() {
 }
 
 #[test]
+fn help_and_version_flags_are_supported() {
+    for flag in ["--help", "-h"] {
+        let output = Command::new(cli())
+            .arg(flag)
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run thought-castle {flag}: {error}"));
+
+        assert!(
+            output.status.success(),
+            "{flag} should succeed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("thought-castle"));
+        assert!(stdout.contains("Commands:"));
+    }
+
+    let version = Command::new(cli())
+        .arg("--version")
+        .output()
+        .expect("failed to run thought-castle --version");
+
+    assert!(
+        version.status.success(),
+        "--version should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&version.stdout),
+        String::from_utf8_lossy(&version.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&version.stdout),
+        format!("thought-castle {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
+fn flags_support_equals_syntax_and_reject_unknown_or_duplicate_names() {
+    let lab = temp_path("flags-lab");
+    let root = temp_path("flags-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before flag tests");
+    fs::create_dir_all(&root).expect("source root should be created");
+
+    let equals_output = Command::new(cli())
+        .args(["source", "list"])
+        .arg(&lab)
+        .arg("--provider=codex")
+        .arg(format!("--root={}", root.display()))
+        .output()
+        .expect("failed to run source list with equals flags");
+
+    assert!(
+        equals_output.status.success(),
+        "--flag=value syntax should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&equals_output.stdout),
+        String::from_utf8_lossy(&equals_output.stderr)
+    );
+
+    let unknown_output = Command::new(cli())
+        .args(["note", "new", "thought"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "Unknown Flag",
+            "--session",
+            "[[01_sessions/example.md#^t0001]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+            "--unknown",
+            "value",
+        ])
+        .output()
+        .expect("failed to run note new with unknown flag");
+
+    assert!(
+        !unknown_output.status.success(),
+        "unknown flag should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unknown_output.stdout),
+        String::from_utf8_lossy(&unknown_output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&unknown_output.stderr).contains("unknown flag: --unknown"));
+
+    let duplicate_output = Command::new(cli())
+        .args(["note", "new", "thought"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "First",
+            "--title",
+            "Second",
+            "--session",
+            "[[01_sessions/example.md#^t0001]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+        ])
+        .output()
+        .expect("failed to run note new with duplicate flag");
+
+    assert!(
+        !duplicate_output.status.success(),
+        "duplicate flag should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&duplicate_output.stdout),
+        String::from_utf8_lossy(&duplicate_output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&duplicate_output.stderr).contains("duplicate flag: --title"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn skill_print_outputs_installable_skill_markdown() {
     let output = Command::new(cli())
         .args(["skill", "print"])
