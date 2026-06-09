@@ -275,8 +275,9 @@ fn repository_defines_ci_for_rust_quality_gates() {
         .join(".github")
         .join("workflows")
         .join("ci.yml");
-    let workflow = fs::read_to_string(&workflow_path)
-        .unwrap_or_else(|error| panic!("CI workflow should be readable at {workflow_path:?}: {error}"));
+    let workflow = fs::read_to_string(&workflow_path).unwrap_or_else(|error| {
+        panic!("CI workflow should be readable at {workflow_path:?}: {error}")
+    });
 
     assert!(workflow.contains("cargo fmt --check"));
     assert!(workflow.contains("cargo clippy --all-targets -- -D warnings"));
