@@ -546,6 +546,55 @@ fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
 }
 
 #[test]
+fn ingest_manual_escapes_control_characters_in_metadata_json() {
+    let lab = temp_path("manual-ingest-escape-lab");
+    let source_dir = temp_path("manual-ingest-escape-source");
+    fs::create_dir_all(&source_dir).expect("source dir should be created");
+    let source_file = source_dir.join("chatgpt-thread.md");
+    fs::write(&source_file, "# Thread\n\nmanual capture")
+        .expect("manual fixture should be written");
+
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before manual ingest"
+    );
+
+    let output = Command::new(cli())
+        .args(["ingest", "manual"])
+        .arg(&lab)
+        .args(["--provider", "chatgpt", "--title"])
+        .arg("line1\nline2\t\"quote\"\\slash\u{0001}")
+        .args(["--file"])
+        .arg(&source_file)
+        .output()
+        .expect("failed to run ingest manual");
+
+    assert!(
+        output.status.success(),
+        "ingest manual should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let metadata = fs::read_to_string(
+        lab.join("00_raw-sessions")
+            .join("manual")
+            .join("chatgpt-thread.md.meta.json"),
+    )
+    .expect("manual metadata should be readable");
+    assert!(metadata.contains(r#""title": "line1\nline2\t\"quote\"\\slash\u0001""#));
+    assert!(!metadata.contains("line1\nline2"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(source_dir).ok();
+}
+
+#[test]
 fn sync_copies_automatic_agent_sessions_and_is_idempotent() {
     let lab = temp_path("sync-agent-lab");
     let root = temp_path("sync-agent-root");
@@ -739,6 +788,47 @@ fn note_new_preserves_korean_title_in_slug_and_adds_suffix_for_duplicates() {
     }
 
     assert_not_exists(lab.join("10_knowledge").join("note.md"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
+fn note_new_escapes_control_characters_in_source_refs_yaml() {
+    let lab = temp_path("note-yaml-escape");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    let output = Command::new(cli())
+        .args(["note", "new", "knowledge"])
+        .arg(&lab)
+        .args(["--title", "Escaped Trace", "--session"])
+        .arg("[[01_sessions/example.md#^t0001]]\nline2\t\"quote\"\\slash\u{0001}")
+        .args(["--raw-file"])
+        .arg("00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u{0001}")
+        .output()
+        .expect("failed to run note new knowledge");
+
+    assert!(
+        output.status.success(),
+        "note new knowledge should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let note_path = lab.join("10_knowledge").join("escaped-trace.md");
+    assert_exists(&note_path);
+    let note = fs::read_to_string(note_path).expect("knowledge note should be readable");
+    assert!(note.contains(
+        r#"session: "[[01_sessions/example.md#^t0001]]\nline2\t\"quote\"\\slash\u0001""#
+    ));
+    assert!(note.contains(
+        r#"raw_file: "00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u0001""#
+    ));
+    assert!(!note.contains("[[01_sessions/example.md#^t0001]]\nline2"));
 
     fs::remove_dir_all(lab).ok();
 }
