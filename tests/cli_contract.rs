@@ -702,6 +702,48 @@ fn note_new_creates_thought_draft_with_source_trace() {
 }
 
 #[test]
+fn note_new_preserves_korean_title_in_slug_and_adds_suffix_for_duplicates() {
+    let lab = temp_path("korean-note");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    for expected_path in [
+        lab.join("10_knowledge").join("중심극한정리.md"),
+        lab.join("10_knowledge").join("중심극한정리-2.md"),
+    ] {
+        let output = Command::new(cli())
+            .args(["note", "new", "knowledge"])
+            .arg(&lab)
+            .args([
+                "--title",
+                "중심극한정리",
+                "--session",
+                "[[01_sessions/example.md#^t0001]]",
+                "--raw-file",
+                "00_raw-sessions/example.txt",
+            ])
+            .output()
+            .expect("failed to run note new knowledge");
+
+        assert!(
+            output.status.success(),
+            "note new knowledge should succeed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_exists(expected_path);
+    }
+
+    assert_not_exists(lab.join("10_knowledge").join("note.md"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
 fn note_new_rejects_post_kind() {
     let lab = temp_path("post-note");
     let init = Command::new(cli())
@@ -736,6 +778,46 @@ fn note_new_rejects_post_kind() {
             .contains("note kind must be one of: knowledge, thought, idea")
     );
     assert_not_exists(lab.join("40_posts"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
+fn session_normalize_preserves_korean_title_in_slug() {
+    let lab = temp_path("korean-session-normalize");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before normalize"
+    );
+
+    let raw_file = lab.join("00_raw-sessions").join("korean-session.txt");
+    fs::write(&raw_file, "베이즈 정리를 설명해줘.").expect("raw fixture should be written");
+
+    let output = Command::new(cli())
+        .args(["session", "normalize"])
+        .arg(&lab)
+        .arg(&raw_file)
+        .args(["--title", "베이즈 정리", "--source-type", "ai_conversation"])
+        .output()
+        .expect("failed to run session normalize");
+
+    assert!(
+        output.status.success(),
+        "session normalize should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let session_path = lab.join("01_sessions").join("베이즈-정리.md");
+    assert_exists(&session_path);
+    let session = fs::read_to_string(session_path).expect("session should be readable");
+    assert!(session.contains("# 베이즈 정리"));
+    assert!(session.contains("### t0001 source ^t0001"));
 
     fs::remove_dir_all(lab).ok();
 }
