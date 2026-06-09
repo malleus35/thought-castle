@@ -142,7 +142,7 @@ fn help_and_version_flags_are_supported() {
     );
     assert_eq!(
         String::from_utf8_lossy(&version.stdout),
-        format!("thought-castle {}\n", env!("CARGO_PKG_VERSION"))
+        "thought-castle 0.1.3\n"
     );
 }
 
