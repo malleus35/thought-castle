@@ -345,6 +345,7 @@ fn packaged_skill_file_is_available_for_agent_installers() {
     assert!(skill.contains("thought-castle ingest"));
     assert!(skill.contains("thought-castle source list"));
     assert!(skill.contains("thought-castle sync"));
+    assert!(skill.contains("thought-castle inventory"));
     assert!(skill.contains("thought-castle ingest manual"));
     assert!(skill.contains("thought-castle note new"));
     assert!(!skill.contains("note new post"));
@@ -361,6 +362,7 @@ fn readme_documents_installation_archive_scope_and_usage() {
     assert!(readme.contains("verified knowledge archive"));
     assert!(readme.contains("thought-castle source list"));
     assert!(readme.contains("thought-castle sync"));
+    assert!(readme.contains("thought-castle inventory"));
     assert!(readme.contains("thought-castle ingest manual"));
     assert!(readme.contains("thought-castle skill install"));
     assert!(readme.contains("~/.pi/agent/skills/"));
@@ -383,8 +385,10 @@ fn readme_delegates_archive_intake_to_the_agent_skill_after_vault_creation() {
     assert!(readme.contains("After Install And Vault Creation"));
     assert!(readme.contains("ask an agent to run the Thought Castle archive intake workflow"));
     assert!(readme.contains("paste a copied transcript"));
+    assert!(readme.contains("inventory"));
     assert!(readme.contains("sync automatic local sessions"));
     assert!(readme.contains("normalize new raw sessions"));
+    assert!(readme.contains("skipped items with reasons"));
 }
 
 #[test]
@@ -417,6 +421,10 @@ fn packaged_skill_defines_archive_intake_workflow_for_agents() {
     assert!(skill.contains("Archive Intake Run"));
     assert!(skill.contains("The user owns installation and vault creation"));
     assert!(skill.contains("sync automatic local sessions"));
+    assert!(skill.contains("Inventory normalized sessions before extracting"));
+    assert!(skill.contains("thought-castle inventory"));
+    assert!(skill.contains("extract, skip, or defer"));
+    assert!(skill.contains("skip reason"));
     assert!(skill.contains("Manual Paste Capture"));
     assert!(skill.contains("Save the pasted transcript"));
     assert!(skill.contains("thought-castle ingest manual"));
