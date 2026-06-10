@@ -111,6 +111,124 @@ fn validate_reports_initialized_lab_as_valid() {
 }
 
 #[test]
+fn help_and_version_flags_are_supported() {
+    for flag in ["--help", "-h"] {
+        let output = Command::new(cli())
+            .arg(flag)
+            .output()
+            .unwrap_or_else(|error| panic!("failed to run thought-castle {flag}: {error}"));
+
+        assert!(
+            output.status.success(),
+            "{flag} should succeed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("thought-castle"));
+        assert!(stdout.contains("Commands:"));
+    }
+
+    let version = Command::new(cli())
+        .arg("--version")
+        .output()
+        .expect("failed to run thought-castle --version");
+
+    assert!(
+        version.status.success(),
+        "--version should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&version.stdout),
+        String::from_utf8_lossy(&version.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&version.stdout),
+        "thought-castle 0.1.3\n"
+    );
+}
+
+#[test]
+fn flags_support_equals_syntax_and_reject_unknown_or_duplicate_names() {
+    let lab = temp_path("flags-lab");
+    let root = temp_path("flags-root");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before flag tests"
+    );
+    fs::create_dir_all(&root).expect("source root should be created");
+
+    let equals_output = Command::new(cli())
+        .args(["source", "list"])
+        .arg(&lab)
+        .arg("--provider=codex")
+        .arg(format!("--root={}", root.display()))
+        .output()
+        .expect("failed to run source list with equals flags");
+
+    assert!(
+        equals_output.status.success(),
+        "--flag=value syntax should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&equals_output.stdout),
+        String::from_utf8_lossy(&equals_output.stderr)
+    );
+
+    let unknown_output = Command::new(cli())
+        .args(["note", "new", "thought"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "Unknown Flag",
+            "--session",
+            "[[01_sessions/example.md#^t0001]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+            "--unknown",
+            "value",
+        ])
+        .output()
+        .expect("failed to run note new with unknown flag");
+
+    assert!(
+        !unknown_output.status.success(),
+        "unknown flag should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&unknown_output.stdout),
+        String::from_utf8_lossy(&unknown_output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&unknown_output.stderr).contains("unknown flag: --unknown"));
+
+    let duplicate_output = Command::new(cli())
+        .args(["note", "new", "thought"])
+        .arg(&lab)
+        .args([
+            "--title",
+            "First",
+            "--title",
+            "Second",
+            "--session",
+            "[[01_sessions/example.md#^t0001]]",
+            "--raw-file",
+            "00_raw-sessions/example.txt",
+        ])
+        .output()
+        .expect("failed to run note new with duplicate flag");
+
+    assert!(
+        !duplicate_output.status.success(),
+        "duplicate flag should fail\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&duplicate_output.stdout),
+        String::from_utf8_lossy(&duplicate_output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&duplicate_output.stderr).contains("duplicate flag: --title"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn skill_print_outputs_installable_skill_markdown() {
     let output = Command::new(cli())
         .args(["skill", "print"])
@@ -267,6 +385,23 @@ fn readme_delegates_archive_intake_to_the_agent_skill_after_vault_creation() {
     assert!(readme.contains("paste a copied transcript"));
     assert!(readme.contains("sync automatic local sessions"));
     assert!(readme.contains("normalize new raw sessions"));
+}
+
+#[test]
+fn repository_defines_ci_for_rust_quality_gates() {
+    let workflow_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github")
+        .join("workflows")
+        .join("ci.yml");
+    let workflow = fs::read_to_string(&workflow_path).unwrap_or_else(|error| {
+        panic!("CI workflow should be readable at {workflow_path:?}: {error}")
+    });
+
+    assert!(workflow.contains("cargo fmt --check"));
+    assert!(workflow.contains("cargo clippy --all-targets -- -D warnings"));
+    assert!(workflow.contains("cargo test"));
+    assert!(workflow.contains("ubuntu-latest"));
+    assert!(workflow.contains("macos-latest"));
 }
 
 #[test]
@@ -529,6 +664,55 @@ fn ingest_manual_copies_web_or_desktop_capture_with_metadata() {
 }
 
 #[test]
+fn ingest_manual_escapes_control_characters_in_metadata_json() {
+    let lab = temp_path("manual-ingest-escape-lab");
+    let source_dir = temp_path("manual-ingest-escape-source");
+    fs::create_dir_all(&source_dir).expect("source dir should be created");
+    let source_file = source_dir.join("chatgpt-thread.md");
+    fs::write(&source_file, "# Thread\n\nmanual capture")
+        .expect("manual fixture should be written");
+
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before manual ingest"
+    );
+
+    let output = Command::new(cli())
+        .args(["ingest", "manual"])
+        .arg(&lab)
+        .args(["--provider", "chatgpt", "--title"])
+        .arg("line1\nline2\t\"quote\"\\slash\u{0001}")
+        .args(["--file"])
+        .arg(&source_file)
+        .output()
+        .expect("failed to run ingest manual");
+
+    assert!(
+        output.status.success(),
+        "ingest manual should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let metadata = fs::read_to_string(
+        lab.join("00_raw-sessions")
+            .join("manual")
+            .join("chatgpt-thread.md.meta.json"),
+    )
+    .expect("manual metadata should be readable");
+    assert!(metadata.contains(r#""title": "line1\nline2\t\"quote\"\\slash\u0001""#));
+    assert!(!metadata.contains("line1\nline2"));
+
+    fs::remove_dir_all(lab).ok();
+    fs::remove_dir_all(source_dir).ok();
+}
+
+#[test]
 fn sync_copies_automatic_agent_sessions_and_is_idempotent() {
     let lab = temp_path("sync-agent-lab");
     let root = temp_path("sync-agent-root");
@@ -685,6 +869,89 @@ fn note_new_creates_thought_draft_with_source_trace() {
 }
 
 #[test]
+fn note_new_preserves_korean_title_in_slug_and_adds_suffix_for_duplicates() {
+    let lab = temp_path("korean-note");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    for expected_path in [
+        lab.join("10_knowledge").join("중심극한정리.md"),
+        lab.join("10_knowledge").join("중심극한정리-2.md"),
+    ] {
+        let output = Command::new(cli())
+            .args(["note", "new", "knowledge"])
+            .arg(&lab)
+            .args([
+                "--title",
+                "중심극한정리",
+                "--session",
+                "[[01_sessions/example.md#^t0001]]",
+                "--raw-file",
+                "00_raw-sessions/example.txt",
+            ])
+            .output()
+            .expect("failed to run note new knowledge");
+
+        assert!(
+            output.status.success(),
+            "note new knowledge should succeed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_exists(expected_path);
+    }
+
+    assert_not_exists(lab.join("10_knowledge").join("note.md"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
+fn note_new_escapes_control_characters_in_source_refs_yaml() {
+    let lab = temp_path("note-yaml-escape");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before note new");
+
+    let output = Command::new(cli())
+        .args(["note", "new", "knowledge"])
+        .arg(&lab)
+        .args(["--title", "Escaped Trace", "--session"])
+        .arg("[[01_sessions/example.md#^t0001]]\nline2\t\"quote\"\\slash\u{0001}")
+        .args(["--raw-file"])
+        .arg("00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u{0001}")
+        .output()
+        .expect("failed to run note new knowledge");
+
+    assert!(
+        output.status.success(),
+        "note new knowledge should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let note_path = lab.join("10_knowledge").join("escaped-trace.md");
+    assert_exists(&note_path);
+    let note = fs::read_to_string(note_path).expect("knowledge note should be readable");
+    assert!(note.contains(
+        r#"session: "[[01_sessions/example.md#^t0001]]\nline2\t\"quote\"\\slash\u0001""#
+    ));
+    assert!(
+        note.contains(r#"raw_file: "00_raw-sessions/example.txt\nline2\t\"quote\"\\slash\u0001""#)
+    );
+    assert!(!note.contains("[[01_sessions/example.md#^t0001]]\nline2"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
 fn note_new_rejects_post_kind() {
     let lab = temp_path("post-note");
     let init = Command::new(cli())
@@ -719,6 +986,46 @@ fn note_new_rejects_post_kind() {
             .contains("note kind must be one of: knowledge, thought, idea")
     );
     assert_not_exists(lab.join("40_posts"));
+
+    fs::remove_dir_all(lab).ok();
+}
+
+#[test]
+fn session_normalize_preserves_korean_title_in_slug() {
+    let lab = temp_path("korean-session-normalize");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before normalize"
+    );
+
+    let raw_file = lab.join("00_raw-sessions").join("korean-session.txt");
+    fs::write(&raw_file, "베이즈 정리를 설명해줘.").expect("raw fixture should be written");
+
+    let output = Command::new(cli())
+        .args(["session", "normalize"])
+        .arg(&lab)
+        .arg(&raw_file)
+        .args(["--title", "베이즈 정리", "--source-type", "ai_conversation"])
+        .output()
+        .expect("failed to run session normalize");
+
+    assert!(
+        output.status.success(),
+        "session normalize should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let session_path = lab.join("01_sessions").join("베이즈-정리.md");
+    assert_exists(&session_path);
+    let session = fs::read_to_string(session_path).expect("session should be readable");
+    assert!(session.contains("# 베이즈 정리"));
+    assert!(session.contains("### t0001 source ^t0001"));
 
     fs::remove_dir_all(lab).ok();
 }
