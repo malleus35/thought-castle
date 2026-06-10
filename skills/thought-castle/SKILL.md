@@ -13,11 +13,12 @@ Thought Castle is for preserving LLM study sessions and turning them into tracea
 ```bash
 thought-castle init <path>
 thought-castle validate <path>
+thought-castle inventory <path>
 thought-castle source list <lab> --provider <codex|claude-code|opencode|pi-agent> --root <path>
 thought-castle sync <lab> --provider <codex|claude-code|opencode|pi-agent> --root <path>
 thought-castle ingest <lab> <source-file> --provider <name> --source-type <type>
 thought-castle ingest manual <lab> --provider <name> --title <title> --file <path>
-thought-castle session normalize <lab> <raw-file> --title <title> --source-type <type>
+thought-castle session normalize <lab> <raw-file> --title <title> --source-type <type> [--provider <name>]
 thought-castle note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>
 thought-castle skill print
 thought-castle skill install
@@ -69,19 +70,25 @@ If the provider or title is missing but inferable from the pasted text, choose a
 ### Steps
 
 1. Validate the vault with `thought-castle validate <vault>`.
-2. sync automatic local sessions for requested providers:
+2. Inventory normalized sessions before extracting:
+   - run `thought-castle inventory <vault>`
+   - classify every normalized session as extract, skip, or defer
+   - record a skip reason or defer reason for every session you do not extract
+   - follow the user's requested language; if none is explicit, follow the latest user-message language
+3. sync automatic local sessions for requested providers:
    - `thought-castle source list <vault> --provider codex --root ~/.codex/sessions`
    - `thought-castle source list <vault> --provider claude-code --root ~/.claude/projects`
    - `thought-castle source list <vault> --provider opencode --root ~/.local/share/opencode`
    - `thought-castle source list <vault> --provider pi-agent --root ~/.pi/agent/sessions`
    - run matching `thought-castle sync` commands only after listing candidates
-3. For pasted transcript text, use Manual Paste Capture.
-4. Normalize newly added raw sessions with `thought-castle session normalize`.
-5. Create traceable drafts only when there is enough signal:
+4. For pasted transcript text, use Manual Paste Capture.
+5. Normalize newly added raw sessions with `thought-castle session normalize`.
+6. Re-run `thought-castle inventory <vault>` after normalization so newly created sessions are also routed.
+7. Create traceable drafts only when there is enough signal:
    - `thought-castle note new knowledge`
    - `thought-castle note new thought`
    - `thought-castle note new idea`
-6. End with a short run report listing captured files, normalized sessions, created notes, skipped items, and manual follow-up.
+8. End with a short run report listing captured files, normalized sessions, created notes, skipped items with reasons, deferred sessions, and manual follow-up.
 
 ### Manual Paste Capture
 
@@ -112,6 +119,8 @@ Do not summarize first and save only the summary. The raw pasted transcript is t
 - Every created note must include `source_refs`.
 - Prefer fewer high-signal notes over many weak notes.
 - If a transcript is too messy to extract safely, normalize it and report that extraction was skipped.
+- Do not silently skip normalized sessions. Mark each one as extract, skip, or defer and include a skip reason or defer reason in the final report.
+- For domain-specific sessions, use the relevant domain context before extracting. For example, treat CartPole PPO sessions as RL/Python learning material and IELTS sessions as study workflow material, then use Thought Castle for source trace and note status.
 
 ## Common Tasks
 
@@ -122,6 +131,12 @@ thought-castle source list . --provider codex --root ~/.codex/sessions
 thought-castle source list . --provider claude-code --root ~/.claude/projects
 thought-castle source list . --provider opencode --root ~/.local/share/opencode
 thought-castle source list . --provider pi-agent --root ~/.pi/agent/sessions
+```
+
+### Inventory normalized sessions
+
+```bash
+thought-castle inventory .
 ```
 
 ### Sync automatic local sources
