@@ -146,7 +146,7 @@ fn help_and_version_flags_are_supported() {
     );
     assert_eq!(
         String::from_utf8_lossy(&version.stdout),
-        "thought-castle 0.1.3\n"
+        "thought-castle 0.1.4\n"
     );
 }
 
