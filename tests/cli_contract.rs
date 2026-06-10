@@ -1150,3 +1150,78 @@ fn session_normalize_renders_codex_jsonl_as_readable_turns() {
 
     fs::remove_dir_all(lab).ok();
 }
+
+#[test]
+fn inventory_reports_pending_sessions_and_coarse_traces() {
+    let lab = temp_path("inventory");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(init.status.success(), "init should succeed before inventory");
+
+    let sessions_dir = lab.join("01_sessions");
+    fs::write(
+        sessions_dir.join("legacy.md"),
+        concat!(
+            "---\n",
+            "type: session\n",
+            "---\n\n",
+            "# Legacy\n\n",
+            "### t0001 source ^t0001\n\n",
+            "raw jsonl\n"
+        ),
+    )
+    .expect("legacy session should be written");
+    fs::write(
+        sessions_dir.join("cartpole.md"),
+        concat!(
+            "---\n",
+            "type: session\n",
+            "---\n\n",
+            "# CartPole\n\n",
+            "### t0001 user ^t0001\n\n",
+            "PPO 질문\n"
+        ),
+    )
+    .expect("cartpole session should be written");
+
+    fs::write(
+        lab.join("10_knowledge").join("legacy-note.md"),
+        concat!(
+            "---\n",
+            "type: knowledge\n",
+            "source_refs:\n",
+            "  - session: \"[[01_sessions/legacy.md#^t0001]]\"\n",
+            "    raw_file: \"00_raw-sessions/codex/legacy.jsonl\"\n",
+            "    extraction_type: knowledge\n",
+            "---\n\n",
+            "# Legacy Note\n"
+        ),
+    )
+    .expect("knowledge note should be written");
+
+    let output = Command::new(cli())
+        .arg("inventory")
+        .arg(&lab)
+        .output()
+        .expect("failed to run inventory");
+
+    assert!(
+        output.status.success(),
+        "inventory should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("sessions: 2"));
+    assert!(stdout.contains("01_sessions/legacy.md"));
+    assert!(stdout.contains("extracted: 1"));
+    assert!(stdout.contains("coarse trace"));
+    assert!(stdout.contains("01_sessions/cartpole.md"));
+    assert!(stdout.contains("pending extraction"));
+
+    fs::remove_dir_all(lab).ok();
+}
