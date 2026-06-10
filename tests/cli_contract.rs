@@ -80,6 +80,10 @@ fn init_creates_core_vault_structure_and_templates() {
     assert!(source_schema.contains("knowledge`, `thought`, or `idea"));
     assert!(!source_schema.contains("post"));
 
+    let readme = fs::read_to_string(target.join("README.md")).expect("README should be readable");
+    assert!(readme.contains("thought-castle inventory"));
+    assert!(readme.contains("skipped items with reasons"));
+
     fs::remove_dir_all(target).ok();
 }
 
