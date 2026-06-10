@@ -102,10 +102,17 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             if command == "session" && subcommand == "normalize" =>
         {
             let flags = Flags::parse(rest)?;
-            flags.reject_unless(&["--title", "--source-type"])?;
+            flags.reject_unless(&["--title", "--source-type", "--provider"])?;
             let title = flags.required("--title")?;
             let source_type = flags.required("--source-type")?;
-            normalize_session(Path::new(lab), Path::new(raw_file), title, source_type)
+            let provider = flags.optional("--provider");
+            normalize_session(
+                Path::new(lab),
+                Path::new(raw_file),
+                title,
+                source_type,
+                provider,
+            )
         }
         [command, subcommand, kind, lab, rest @ ..] if command == "note" && subcommand == "new" => {
             let flags = Flags::parse(rest)?;
@@ -137,7 +144,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type>\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type> [--provider <name>]\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
     );
 }
 
@@ -521,15 +528,46 @@ fn create_note(
     Ok(())
 }
 
-fn normalize_session(lab: &Path, raw_file: &Path, title: &str, source_type: &str) -> CliResult<()> {
+fn normalize_session(
+    lab: &Path,
+    raw_file: &Path,
+    title: &str,
+    source_type: &str,
+    provider: Option<&str>,
+) -> CliResult<()> {
     let raw_text = fs::read_to_string(raw_file).map_err(CliError::Io)?;
     let raw_relative = relative_display(lab, raw_file);
-    let session = format!(
+    let session = match provider {
+        Some("codex") => normalize_codex_session(&raw_text, &raw_relative, title, source_type),
+        Some(provider) => {
+            normalize_raw_session(&raw_text, &raw_relative, title, source_type, Some(provider))
+        }
+        None => normalize_raw_session(&raw_text, &raw_relative, title, source_type, None),
+    };
+
+    let destination = unique_markdown_path(&lab.join("01_sessions"), &slugify(title));
+    write_new(&destination, &session)?;
+    println!("normalized: {}", destination.display());
+    Ok(())
+}
+
+fn normalize_raw_session(
+    raw_text: &str,
+    raw_relative: &str,
+    title: &str,
+    source_type: &str,
+    provider: Option<&str>,
+) -> String {
+    let provider_line = provider
+        .map(|provider| format!("provider: {provider}\n"))
+        .unwrap_or_default();
+    format!(
         concat!(
             "---\n",
             "type: session\n",
             "status: normalized\n",
             "source_type: {}\n",
+            "{}",
             "participants: []\n",
             "raw_file: {}\n",
             "tags:\n",
@@ -548,13 +586,184 @@ fn normalize_session(lab: &Path, raw_file: &Path, title: &str, source_type: &str
             "### Thought Candidates\n\n",
             "### Idea Candidates\n"
         ),
-        source_type, raw_relative, title, raw_text
-    );
+        source_type, provider_line, raw_relative, title, raw_text
+    )
+}
 
-    let destination = unique_markdown_path(&lab.join("01_sessions"), &slugify(title));
-    write_new(&destination, &session)?;
-    println!("normalized: {}", destination.display());
-    Ok(())
+fn normalize_codex_session(
+    raw_text: &str,
+    raw_relative: &str,
+    title: &str,
+    source_type: &str,
+) -> String {
+    let total = raw_text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    let turns = codex_turns(raw_text);
+    if turns.is_empty() {
+        return normalize_raw_session(raw_text, raw_relative, title, source_type, Some("codex"));
+    }
+
+    let rendered = turns.len();
+    let omitted = total.saturating_sub(rendered);
+    let mut conversation = String::new();
+    for (index, turn) in turns.iter().enumerate() {
+        let turn_id = format!("t{:04}", index + 1);
+        conversation.push_str(&format!("### {turn_id} {} ^{turn_id}\n\n", turn.role));
+        conversation.push_str(turn.text.trim());
+        conversation.push_str("\n\n");
+    }
+
+    format!(
+        concat!(
+            "---\n",
+            "type: session\n",
+            "status: normalized\n",
+            "source_type: {}\n",
+            "provider: codex\n",
+            "participants: []\n",
+            "raw_file: {}\n",
+            "events_total: {}\n",
+            "events_rendered: {}\n",
+            "events_omitted: {}\n",
+            "tags:\n",
+            "  - type/session\n",
+            "---\n\n",
+            "# {}\n\n",
+            "## Summary\n\n",
+            "TODO: summarize this session.\n\n",
+            "## Context\n\n",
+            "TODO: explain why this session was captured.\n\n",
+            "## Conversation\n\n",
+            "{}",
+            "## Omitted Events\n\n",
+            "- omitted_events: {}\n\n",
+            "## Extracted Candidates\n\n",
+            "### Knowledge Candidates\n\n",
+            "### Thought Candidates\n\n",
+            "### Idea Candidates\n"
+        ),
+        source_type, raw_relative, total, rendered, omitted, title, conversation, omitted
+    )
+}
+
+struct CodexTurn {
+    role: String,
+    text: String,
+}
+
+fn codex_turns(raw_text: &str) -> Vec<CodexTurn> {
+    raw_text.lines().filter_map(codex_turn_from_line).collect()
+}
+
+fn codex_turn_from_line(line: &str) -> Option<CodexTurn> {
+    if !json_string_values(line, "type")
+        .iter()
+        .any(|value| value == "response_item")
+    {
+        return None;
+    }
+    if !json_string_values(line, "type")
+        .iter()
+        .any(|value| value == "message")
+    {
+        return None;
+    }
+
+    let role = json_string_values(line, "role")
+        .into_iter()
+        .find(|value| value == "user" || value == "assistant")?;
+    let text = json_string_values(line, "text")
+        .into_iter()
+        .find(|value| !value.trim().is_empty())?;
+
+    Some(CodexTurn { role, text })
+}
+
+fn json_string_values(input: &str, field: &str) -> Vec<String> {
+    let needle = format!("\"{field}\"");
+    let mut values = Vec::new();
+    let mut offset = 0usize;
+
+    while let Some(position) = input[offset..].find(&needle) {
+        let key_end = offset + position + needle.len();
+        let colon = skip_ascii_whitespace(input, key_end);
+        if input.as_bytes().get(colon) != Some(&b':') {
+            offset = key_end;
+            continue;
+        }
+
+        let value_start = skip_ascii_whitespace(input, colon + 1);
+        if input.as_bytes().get(value_start) != Some(&b'"') {
+            offset = value_start;
+            continue;
+        }
+
+        if let Some((value, end)) = parse_json_string(input, value_start) {
+            values.push(value);
+            offset = end;
+        } else {
+            offset = value_start + 1;
+        }
+    }
+
+    values
+}
+
+fn skip_ascii_whitespace(input: &str, mut index: usize) -> usize {
+    while let Some(byte) = input.as_bytes().get(index) {
+        if !byte.is_ascii_whitespace() {
+            break;
+        }
+        index += 1;
+    }
+    index
+}
+
+fn parse_json_string(input: &str, quote_start: usize) -> Option<(String, usize)> {
+    let bytes = input.as_bytes();
+    if bytes.get(quote_start) != Some(&b'"') {
+        return None;
+    }
+
+    let mut value = String::new();
+    let mut index = quote_start + 1;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'"' => return Some((value, index + 1)),
+            b'\\' => {
+                index += 1;
+                let escaped = *bytes.get(index)?;
+                match escaped {
+                    b'"' => value.push('"'),
+                    b'\\' => value.push('\\'),
+                    b'/' => value.push('/'),
+                    b'b' => value.push('\u{08}'),
+                    b'f' => value.push('\u{0c}'),
+                    b'n' => value.push('\n'),
+                    b'r' => value.push('\r'),
+                    b't' => value.push('\t'),
+                    b'u' => {
+                        let end = index + 5;
+                        let hex = input.get(index + 1..end)?;
+                        let code = u32::from_str_radix(hex, 16).ok()?;
+                        value.push(char::from_u32(code)?);
+                        index = end - 1;
+                    }
+                    other => value.push(other as char),
+                }
+                index += 1;
+            }
+            _ => {
+                let character = input[index..].chars().next()?;
+                value.push(character);
+                index += character.len_utf8();
+            }
+        }
+    }
+
+    None
 }
 
 fn write_if_missing(path: &Path, contents: &str) -> CliResult<()> {
