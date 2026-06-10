@@ -1082,3 +1082,71 @@ fn session_normalize_creates_canonical_markdown_with_block_id() {
 
     fs::remove_dir_all(lab).ok();
 }
+
+#[test]
+fn session_normalize_renders_codex_jsonl_as_readable_turns() {
+    let lab = temp_path("codex-readable-normalize");
+    let init = Command::new(cli())
+        .arg("init")
+        .arg(&lab)
+        .output()
+        .expect("failed to run init");
+    assert!(
+        init.status.success(),
+        "init should succeed before normalize"
+    );
+
+    let raw_file = lab.join("00_raw-sessions").join("codex-session.jsonl");
+    fs::write(
+        &raw_file,
+        concat!(
+            r#"{"type":"session_meta","payload":{"source":"cli"}}"#,
+            "\n",
+            r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"PPO가 뭐야?"}]}}"#,
+            "\n",
+            r#"{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"final_answer","content":[{"type":"output_text","text":"PPO는 정책을 조금씩 안정적으로 개선하는 방법입니다."}]}}"#,
+            "\n",
+            r#"{"type":"event_msg","payload":{"type":"token_count","info":{"total_tokens":42}}}"#,
+            "\n"
+        ),
+    )
+    .expect("raw fixture should be written");
+
+    let output = Command::new(cli())
+        .args(["session", "normalize"])
+        .arg(&lab)
+        .arg(&raw_file)
+        .args([
+            "--title",
+            "PPO Study",
+            "--source-type",
+            "ai_conversation",
+            "--provider",
+            "codex",
+        ])
+        .output()
+        .expect("failed to run session normalize");
+
+    assert!(
+        output.status.success(),
+        "session normalize should succeed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let session_path = lab.join("01_sessions").join("ppo-study.md");
+    assert_exists(&session_path);
+    let session = fs::read_to_string(session_path).expect("session should be readable");
+    assert!(session.contains("provider: codex"));
+    assert!(session.contains("events_total: 4"));
+    assert!(session.contains("events_rendered: 2"));
+    assert!(session.contains("events_omitted: 2"));
+    assert!(session.contains("### t0001 user ^t0001"));
+    assert!(session.contains("PPO가 뭐야?"));
+    assert!(session.contains("### t0002 assistant ^t0002"));
+    assert!(session.contains("PPO는 정책을 조금씩 안정적으로 개선하는 방법입니다."));
+    assert!(!session.contains(r#""type":"session_meta""#));
+    assert!(!session.contains("token_count"));
+
+    fs::remove_dir_all(lab).ok();
+}
