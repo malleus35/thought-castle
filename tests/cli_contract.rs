@@ -1159,7 +1159,10 @@ fn inventory_reports_pending_sessions_and_coarse_traces() {
         .arg(&lab)
         .output()
         .expect("failed to run init");
-    assert!(init.status.success(), "init should succeed before inventory");
+    assert!(
+        init.status.success(),
+        "init should succeed before inventory"
+    );
 
     let sessions_dir = lab.join("01_sessions");
     fs::write(

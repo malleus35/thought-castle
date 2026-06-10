@@ -65,6 +65,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
         [command, path] if command == "validate" => validate_lab(Path::new(path)).map(|report| {
             println!("valid: {}", report.summary());
         }),
+        [command, lab] if command == "inventory" => inventory_lab(Path::new(lab)),
         [command, subcommand] if command == "skill" && subcommand == "print" => {
             print!("{SKILL_MD}");
             Ok(())
@@ -136,7 +137,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
             install_skill(Path::new(target))
         }
         _ => Err(CliError::Usage(
-            "expected: init <path> | validate <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install [--target <path>]"
+            "expected: init <path> | validate <path> | inventory <path> | source list <lab> --provider <name> --root <path> | sync <lab> --provider <name> --root <path> | ingest <lab> <source> --provider <name> --source-type <type> | ingest manual <lab> --provider <name> --title <title> --file <path> | note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path> | skill print | skill install [--target <path>]"
                 .to_string(),
         )),
     }
@@ -144,7 +145,7 @@ fn run(args: impl IntoIterator<Item = String>) -> CliResult<()> {
 
 fn print_help() {
     println!(
-        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type> [--provider <name>]\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
+        "thought-castle\n\nCommands:\n  init <path>\n  validate <path>\n  inventory <path>\n  source list <lab> --provider <name> --root <path>\n  sync <lab> --provider <name> --root <path>\n  ingest <lab> <source> --provider <name> --source-type <type>\n  ingest manual <lab> --provider <name> --title <title> --file <path>\n  session normalize <lab> <raw-file> --title <title> --source-type <type> [--provider <name>]\n  note new <knowledge|thought|idea> <lab> --title <title> --session <ref> --raw-file <path>\n  skill print\n  skill install [--target <path>]    # default: Pi, Claude Code, Codex, and shared Agent Skills dirs"
     );
 }
 
@@ -207,6 +208,92 @@ fn validate_lab(root: &Path) -> CliResult<ValidationReport> {
     Ok(ValidationReport {
         directories: CORE_DIRS.len(),
         templates: TEMPLATE_FILES.len(),
+    })
+}
+
+fn inventory_lab(lab: &Path) -> CliResult<()> {
+    validate_lab(lab)?;
+
+    let mut sessions = discover_by_extension(&lab.join("01_sessions"), "md")?;
+    sessions.sort();
+    let refs = collect_derived_session_refs(lab)?;
+
+    println!("sessions: {}", sessions.len());
+    for session_path in sessions {
+        let relative = relative_display(lab, &session_path);
+        let session_text = fs::read_to_string(&session_path).map_err(CliError::Io)?;
+        let matching_refs: Vec<&SessionRef> = refs
+            .iter()
+            .filter(|source_ref| source_ref.session_path == relative)
+            .collect();
+        let status = if matching_refs.is_empty() {
+            "pending extraction".to_string()
+        } else {
+            format!("extracted: {}", matching_refs.len())
+        };
+        let coarse_trace = matching_refs.iter().any(|source_ref| {
+            source_ref.anchor.as_deref() == Some("^t0001")
+                && session_text.contains("### t0001 source ^t0001")
+        });
+        if coarse_trace {
+            println!("- {relative} | {status} | coarse trace");
+        } else {
+            println!("- {relative} | {status}");
+        }
+    }
+    Ok(())
+}
+
+struct SessionRef {
+    session_path: String,
+    anchor: Option<String>,
+}
+
+fn collect_derived_session_refs(lab: &Path) -> CliResult<Vec<SessionRef>> {
+    let mut refs = Vec::new();
+    for directory in ["10_knowledge", "20_thoughts", "30_ideas"] {
+        let path = lab.join(directory);
+        let mut notes = discover_by_extension(&path, "md")?;
+        notes.sort();
+        for note in notes {
+            let contents = fs::read_to_string(note).map_err(CliError::Io)?;
+            refs.extend(extract_session_refs(&contents));
+        }
+    }
+    Ok(refs)
+}
+
+fn extract_session_refs(contents: &str) -> Vec<SessionRef> {
+    let mut refs = Vec::new();
+    let mut offset = 0usize;
+    while let Some(start) = contents[offset..].find("[[") {
+        let link_start = offset + start + 2;
+        let Some(end) = contents[link_start..].find("]]") else {
+            break;
+        };
+        let link_end = link_start + end;
+        let target = &contents[link_start..link_end];
+        if let Some(session_ref) = parse_session_ref(target) {
+            refs.push(session_ref);
+        }
+        offset = link_end + 2;
+    }
+    refs
+}
+
+fn parse_session_ref(target: &str) -> Option<SessionRef> {
+    if !target.starts_with("01_sessions/") {
+        return None;
+    }
+
+    let (session_path, anchor) = target
+        .split_once('#')
+        .map(|(path, anchor)| (path.to_string(), Some(anchor.to_string())))
+        .unwrap_or_else(|| (target.to_string(), None));
+
+    Some(SessionRef {
+        session_path,
+        anchor,
     })
 }
 
